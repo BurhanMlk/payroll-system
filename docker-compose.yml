@@ -1,0 +1,90 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: edupayroll_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: payroll
+      POSTGRES_PASSWORD: payroll_dev_password
+      POSTGRES_DB: edupayroll
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payroll -d edupayroll"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: edupayroll_redis
+    restart: unless-stopped
+    # Disable persistence (dev) so BullMQ writes never hit RDB "MISCONF" errors.
+    command: ["redis-server", "--appendonly", "no", "--save", "", "--stop-writes-on-bgsave-error", "no"]
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: edupayroll_server
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://payroll:payroll_dev_password@postgres:5432/edupayroll?schema=public
+      REDIS_URL: redis://redis:6379
+      PORT: 4000
+      STORAGE_LOCAL_PATH: /app/storage
+    ports:
+      - "4000:4000"
+    volumes:
+      - server_storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+
+  client:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+      args:
+        VITE_API_BASE_URL: http://localhost:4000
+    container_name: edupayroll_client
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - server
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: edupayroll_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/certs:/etc/nginx/certs:ro
+    depends_on:
+      - server
+      - client
+
+volumes:
+  postgres_data:
+  redis_data:
+  server_storage:
