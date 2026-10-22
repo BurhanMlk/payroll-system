@@ -6,6 +6,8 @@ export const redis = new IORedis(env.REDIS_URL, {
   maxRetriesPerRequest: null, // required by BullMQ
   enableReadyCheck: false,
   retryStrategy: (times) => Math.min(times * 200, 5000),
+  // Heroku Redis serves TLS (rediss://) with a self-signed cert.
+  ...(env.REDIS_URL.startsWith("rediss://") ? { tls: { rejectUnauthorized: false } } : {}),
 });
 
 redis.on("error", (err) => {

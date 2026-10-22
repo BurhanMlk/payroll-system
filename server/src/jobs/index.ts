@@ -5,7 +5,11 @@ import { processSubscriptionExpiry, sendExpiryReminders } from "../modules/subsc
 import { prisma } from "../lib/prisma";
 import { dayjs } from "../utils/dates";
 
-const connection = { url: env.REDIS_URL };
+const connection = {
+  url: env.REDIS_URL,
+  // Heroku Redis serves TLS (rediss://) with a self-signed cert.
+  ...(env.REDIS_URL.startsWith("rediss://") ? { tls: { rejectUnauthorized: false } } : {}),
+};
 
 // Queue names
 export const QUEUES = {
