@@ -1,12 +1,18 @@
 import { useState, FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { employeeApi, setEmployeeToken } from "@/lib/employeeApi";
+import {
+  employeeApi,
+  setEmployeeToken,
+  saveEmployeeCredentials,
+  saveEmployeeAccounts,
+  InstitutionAccount,
+} from "@/lib/employeeApi";
 import { errorMessage } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Logo from "@/components/Logo";
-import { LogIn } from "lucide-react";
+import { LogIn, Landmark } from "lucide-react";
 
 function formatCnic(value: string): string {
   const digits = value.replace(/\D/g, "").slice(0, 13);
@@ -19,6 +25,7 @@ export default function EmployeePortalLoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [accounts, setAccounts] = useState<InstitutionAccount[]>([]);
   const navigate = useNavigate();
 
   const submit = async (e: FormEvent) => {
@@ -27,7 +34,35 @@ export default function EmployeePortalLoginPage() {
     setError("");
     try {
       const res = await employeeApi.post("/login", { cnic, password });
+      const data = res.data.data;
+
+      if (data?.requiresSelection && data.accounts?.length) {
+        setAccounts(data.accounts);
+        return;
+      }
+
+      setEmployeeToken(data.accessToken);
+      saveEmployeeCredentials(cnic, password);
+      navigate("/employee/portal");
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const chooseAccount = async (account: InstitutionAccount) => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await employeeApi.post("/select", {
+        cnic,
+        password,
+        employeeId: account.employeeId,
+      });
       setEmployeeToken(res.data.data.accessToken);
+      saveEmployeeCredentials(cnic, password);
+      saveEmployeeAccounts(accounts);
       navigate("/employee/portal");
     } catch (err) {
       setError(errorMessage(err));
@@ -82,6 +117,54 @@ export default function EmployeePortalLoginPage() {
           Admin? <Link to="/login" className="text-indigo-600 hover:underline">Sign in here</Link>
         </p>
       </div>
+
+      {accounts.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex flex-col items-center text-center">
+              <Landmark className="h-8 w-8 text-indigo-600" />
+              <h2 className="mt-2 text-lg font-bold text-slate-900">Select Institution</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                You are enrolled in multiple institutions. Choose which one to view.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              {accounts.map((a) => (
+                <button
+                  key={a.employeeId}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => chooseAccount(a)}
+                  className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-4 py-3 text-left transition hover:border-indigo-400 hover:bg-indigo-50 disabled:opacity-50"
+                >
+                  <div>
+                    <p className="font-semibold text-slate-900">{a.tenantName}</p>
+                    <p className="text-xs text-slate-500">
+                      {a.firstName} {a.lastName} · {a.employeeNumber}
+                    </p>
+                  </div>
+                  <LogIn className="h-4 w-4 text-slate-400" />
+                </button>
+              ))}
+            </div>
+
+            {error && <p className="mt-3 rounded-md bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>}
+
+            <Button
+              variant="outline"
+              className="mt-4 w-full"
+              disabled={loading}
+              onClick={() => {
+                setAccounts([]);
+                setError("");
+              }}
+            >
+              Back
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

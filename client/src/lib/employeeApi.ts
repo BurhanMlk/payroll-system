@@ -26,3 +26,49 @@ employeeApi.interceptors.request.use((config) => {
   }
   return config;
 });
+
+export interface InstitutionAccount {
+  employeeId: string;
+  employeeNumber: string;
+  firstName: string;
+  lastName: string;
+  tenantName: string;
+}
+
+const EMPLOYEE_CRED_KEY = "edupayroll.employee_credentials";
+const EMPLOYEE_ACCOUNTS_KEY = "edupayroll.employee_accounts";
+
+export function saveEmployeeCredentials(cnic: string, password: string) {
+  sessionStorage.setItem(EMPLOYEE_CRED_KEY, JSON.stringify({ cnic, password }));
+}
+
+export function getEmployeeCredentials(): { cnic: string; password: string } | null {
+  const raw = sessionStorage.getItem(EMPLOYEE_CRED_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as { cnic: string; password: string };
+  } catch {
+    return null;
+  }
+}
+
+export function saveEmployeeAccounts(accounts: InstitutionAccount[]) {
+  sessionStorage.setItem(EMPLOYEE_ACCOUNTS_KEY, JSON.stringify(accounts));
+}
+
+export function getEmployeeAccounts(): InstitutionAccount[] {
+  const raw = sessionStorage.getItem(EMPLOYEE_ACCOUNTS_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as InstitutionAccount[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function clearEmployeeSession() {
+  setEmployeeToken(null);
+  sessionStorage.removeItem(EMPLOYEE_CRED_KEY);
+  sessionStorage.removeItem(EMPLOYEE_ACCOUNTS_KEY);
+}

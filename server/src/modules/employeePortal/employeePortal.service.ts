@@ -6,29 +6,24 @@ function formatCnic(digits: string): string {
   return `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12, 13)}`;
 }
 
-/** Employee self-service login: CNIC as username, last 4 digits of CNIC as password. */
-export async function employeeLogin(cnic: string, password: string) {
-  const raw = (cnic || "").trim();
-  const digits = raw.replace(/\D/g, "");
-  if (!digits) throw AppError.unauthorized("Invalid CNIC or password.", "INVALID_CREDENTIALS");
-
-  const candidates = Array.from(
+function cnicCandidates(raw: string, digits: string): string[] {
+  return Array.from(
     new Set([raw, digits, digits.length === 13 ? formatCnic(digits) : null].filter((v): v is string => Boolean(v))),
   );
+}
 
-  const employee = await prisma.employee.findFirst({
-    where: { nationalId: { in: candidates } },
-    include: { tenant: { select: { id: true, name: true } } },
-  });
+const INACTIVE_STATUSES = ["TERMINATED", "RESIGNED", "RETIRED", "SUSPENDED"];
 
-  if (!employee) throw AppError.unauthorized("Invalid CNIC or password.", "INVALID_CREDENTIALS");
-  if (["TERMINATED", "RESIGNED", "RETIRED", "SUSPENDED"].includes(employee.status)) {
-    throw AppError.unauthorized("Your account is not active.", "ACCOUNT_INACTIVE");
-  }
+interface EmployeeWithTenant {
+  id: string;
+  tenantId: string;
+  employeeNumber: string;
+  firstName: string;
+  lastName: string;
+  tenant: { name: string } | null;
+}
 
-  const expected = digits.slice(-4);
-  if (password !== expected) throw AppError.unauthorized("Invalid CNIC or password.", "INVALID_CREDENTIALS");
-
+function signInEmployee(employee: EmployeeWithTenant) {
   const accessToken = signEmployeeToken({
     sub: employee.id,
     tenantId: employee.tenantId,
@@ -47,6 +42,68 @@ export async function employeeLogin(cnic: string, password: string) {
       tenantName: employee.tenant?.name ?? "",
     },
   };
+}
+
+/**
+ * Employee self-service login: CNIC as username, last 4 digits of CNIC as password.
+ * A CNIC can belong to more than one institution (e.g. a college and its academy),
+ * so when several active records match, the caller gets a list to choose from.
+ */
+export async function employeeLogin(cnic: string, password: string) {
+  const raw = (cnic || "").trim();
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) throw AppError.unauthorized("Invalid CNIC or password.", "INVALID_CREDENTIALS");
+
+  const candidates = cnicCandidates(raw, digits);
+  const employees = await prisma.employee.findMany({
+    where: { nationalId: { in: candidates } },
+    include: { tenant: { select: { id: true, name: true } } },
+  });
+
+  if (employees.length === 0) throw AppError.unauthorized("Invalid CNIC or password.", "INVALID_CREDENTIALS");
+
+  const expected = digits.slice(-4);
+  if (password !== expected) throw AppError.unauthorized("Invalid CNIC or password.", "INVALID_CREDENTIALS");
+
+  const active = employees.filter((e) => !INACTIVE_STATUSES.includes(e.status));
+  if (active.length === 0) throw AppError.unauthorized("Your account is not active.", "ACCOUNT_INACTIVE");
+
+  if (active.length === 1) return signInEmployee(active[0]);
+
+  // Same CNIC is enrolled in multiple institutions — let the employee pick one.
+  return {
+    requiresSelection: true,
+    accounts: active.map((e) => ({
+      employeeId: e.id,
+      employeeNumber: e.employeeNumber,
+      firstName: e.firstName,
+      lastName: e.lastName,
+      tenantName: e.tenant?.name ?? "",
+    })),
+  };
+}
+
+/** Pick one institution (employee record) after login and issue its access token. */
+export async function employeeSelect(cnic: string, password: string, employeeId: string) {
+  const raw = (cnic || "").trim();
+  const digits = raw.replace(/\D/g, "");
+  if (!digits || !employeeId) throw AppError.unauthorized("Invalid CNIC or password.", "INVALID_CREDENTIALS");
+
+  const candidates = cnicCandidates(raw, digits);
+  const employee = await prisma.employee.findFirst({
+    where: { id: employeeId, nationalId: { in: candidates } },
+    include: { tenant: { select: { id: true, name: true } } },
+  });
+
+  if (!employee) throw AppError.unauthorized("Invalid CNIC or password.", "INVALID_CREDENTIALS");
+  if (INACTIVE_STATUSES.includes(employee.status)) {
+    throw AppError.unauthorized("Your account is not active.", "ACCOUNT_INACTIVE");
+  }
+
+  const expected = digits.slice(-4);
+  if (password !== expected) throw AppError.unauthorized("Invalid CNIC or password.", "INVALID_CREDENTIALS");
+
+  return signInEmployee(employee);
 }
 
 /** Full self profile for a logged-in employee. */

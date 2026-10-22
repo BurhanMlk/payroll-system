@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { employeeLogin, getEmployeeSelf } from "./employeePortal.service";
+import { employeeLogin, employeeSelect, getEmployeeSelf } from "./employeePortal.service";
 import { ok } from "../../lib/response";
 import { prisma } from "../../lib/prisma";
 import { getPayslip } from "../payroll/payroll.service";
@@ -9,6 +9,15 @@ export async function login(req: Request, res: Response, next: NextFunction) {
   try {
     const { cnic, password } = req.body as { cnic: string; password: string };
     ok(res, await employeeLogin(cnic, password));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function select(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { cnic, password, employeeId } = req.body as { cnic: string; password: string; employeeId: string };
+    ok(res, await employeeSelect(cnic, password, employeeId));
   } catch (err) {
     next(err);
   }

@@ -1,13 +1,22 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { employeeApi, getEmployeeToken, setEmployeeToken } from "@/lib/employeeApi";
+import {
+  employeeApi,
+  getEmployeeToken,
+  setEmployeeToken,
+  getEmployeeAccounts,
+  getEmployeeCredentials,
+  clearEmployeeSession,
+  InstitutionAccount,
+} from "@/lib/employeeApi";
+import { errorMessage } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Badge, statusVariant } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatDate, initials } from "@/lib/utils";
-import { Download, LogOut, FileText, CalendarDays, Banknote, CreditCard, User, Briefcase, Landmark } from "lucide-react";
+import { Download, LogOut, FileText, CalendarDays, Banknote, CreditCard, User, Briefcase, Landmark, Building2 } from "lucide-react";
 
 interface Payslip {
   id: string;
@@ -72,26 +81,60 @@ export default function EmployeePortalDashboard() {
   const [data, setData] = useState<SelfProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [accounts, setAccounts] = useState<InstitutionAccount[]>([]);
+  const [switching, setSwitching] = useState(false);
   const navigate = useNavigate();
+
+  const loadProfile = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await employeeApi.get("/me");
+      setData(res.data.data as SelfProfile);
+    } catch {
+      clearEmployeeSession();
+      navigate("/employee");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!getEmployeeToken()) {
       navigate("/employee");
       return;
     }
-    employeeApi
-      .get("/me")
-      .then((res) => setData(res.data.data as SelfProfile))
-      .catch(() => {
-        setEmployeeToken(null);
-        navigate("/employee");
-      })
-      .finally(() => setLoading(false));
+    setAccounts(getEmployeeAccounts());
+    loadProfile();
   }, [navigate]);
 
   const logout = () => {
-    setEmployeeToken(null);
+    clearEmployeeSession();
     navigate("/employee");
+  };
+
+  const switchInstitution = async (employeeId: string) => {
+    const creds = getEmployeeCredentials();
+    if (!creds) {
+      logout();
+      return;
+    }
+    setSwitching(true);
+    setError("");
+    try {
+      const res = await employeeApi.post("/select", {
+        cnic: creds.cnic,
+        password: creds.password,
+        employeeId,
+      });
+      setEmployeeToken(res.data.data.accessToken);
+      setData(null);
+      await loadProfile();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSwitching(false);
+    }
   };
 
   const downloadPdf = async (id: string, employeeNumber: string) => {
@@ -149,6 +192,23 @@ export default function EmployeePortalDashboard() {
               {data.designation ? ` · ${data.designation.name}` : ""}
               {data.department ? ` · ${data.department.name}` : ""}
             </p>
+            {accounts.length > 1 && (
+              <div className="mt-2 flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-slate-300" />
+                <select
+                  value={data.id}
+                  disabled={switching}
+                  onChange={(e) => switchInstitution(e.target.value)}
+                  className="h-8 max-w-[220px] rounded-md border border-white/20 bg-slate-800 px-2 text-sm text-white outline-none focus:border-indigo-400 disabled:opacity-50"
+                >
+                  {accounts.map((a) => (
+                    <option key={a.employeeId} value={a.employeeId}>
+                      {a.tenantName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
           <div className="hidden text-right sm:block">
             <p className="text-sm font-semibold">{data.tenant.name}</p>
@@ -161,6 +221,12 @@ export default function EmployeePortalDashboard() {
       </header>
 
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
+        {error && (
+          <Card className="border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {error}
+          </Card>
+        )}
+
         {/* Info cards */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <SectionCard title="Personal Information" icon={<User className="h-4 w-4" />}>
