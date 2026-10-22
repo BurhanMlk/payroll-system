@@ -22,6 +22,10 @@ export default defineConfig({
       },
     },
   },
+  preview: {
+    // Allow serving behind the *.herokuapp.com host (Vite blocks unknown hosts by default).
+    allowedHosts: [".herokuapp.com"],
+  },
   build: {
     outDir: "dist",
     sourcemap: false,
