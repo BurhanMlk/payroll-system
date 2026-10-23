@@ -90,6 +90,12 @@ export default function RegisterPage() {
     },
   });
 
+  useEffect(() => {
+    if (plans?.length && !form.getValues("planKey")) {
+      form.setValue("planKey", plans[0].key, { shouldValidate: true });
+    }
+  }, [form, plans]);
+
   const selectedPlanKey = form.watch("planKey");
   const billingPeriod = form.watch("billingPeriod");
   const countryCode = form.watch("country");
@@ -117,7 +123,16 @@ export default function RegisterPage() {
   const onSubmit = async (values: FormValues) => {
     setSubmitting(true);
     try {
-      const res = await api.post("/onboarding/register", { ...values, trial: true });
+      const res = await api.post("/onboarding/register", {
+        ...values,
+        institutionEmail: values.institutionEmail?.trim() || undefined,
+        phone: values.phone?.trim() || undefined,
+        website: values.website?.trim() || undefined,
+        address: values.address?.trim() || undefined,
+        city: values.city?.trim() || undefined,
+        country: values.country?.trim() || undefined,
+        trial: true,
+      });
       toast({ title: "Account created", description: "Your institution is ready. Sign in to continue.", variant: "success" });
       navigate("/login", { state: { email: res.data?.data?.user?.email } });
     } catch (err) {

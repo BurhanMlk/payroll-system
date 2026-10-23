@@ -76,6 +76,11 @@ export interface ApiError {
 export function errorMessage(err: unknown, fallback = "Something went wrong"): string {
   if (axios.isAxiosError(err)) {
     const data = err.response?.data as ApiError | undefined;
+    const fieldErrors = (data?.error?.details as { fieldErrors?: Record<string, string[]> } | undefined)?.fieldErrors;
+    const fields = fieldErrors
+      ? Object.values(fieldErrors).flat().filter(Boolean)
+      : [];
+    if (fields.length) return fields.join(" ");
     return data?.error?.message ?? fallback;
   }
   return fallback;
