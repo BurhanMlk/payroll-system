@@ -124,13 +124,20 @@ export default function RegisterPage() {
     setSubmitting(true);
     try {
       const res = await api.post("/onboarding/register", {
-        ...values,
+        fullName: values.fullName.trim(),
+        email: values.email.trim().toLowerCase(),
+        password: values.password,
+        institutionName: values.institutionName.trim(),
+        institutionType: values.institutionType,
         institutionEmail: values.institutionEmail?.trim() || undefined,
         phone: values.phone?.trim() || undefined,
         website: values.website?.trim() || undefined,
         address: values.address?.trim() || undefined,
         city: values.city?.trim() || undefined,
         country: values.country?.trim() || undefined,
+        currency: values.currency.trim().toUpperCase(),
+        planKey: values.planKey,
+        billingPeriod: values.billingPeriod,
         trial: true,
       });
       toast({ title: "Account created", description: "Your institution is ready. Sign in to continue.", variant: "success" });
@@ -296,7 +303,7 @@ export default function RegisterPage() {
             {form.formState.errors.planKey && <p className="mt-2 text-xs text-destructive">{form.formState.errors.planKey.message}</p>}
           </section>
 
-          <Button type="submit" className="w-full" size="lg" disabled={submitting}>
+          <Button type="submit" className="w-full" size="lg" disabled={submitting || !plans?.length}>
             {submitting ? "Creating account…" : "Start free trial"}
           </Button>
         </form>

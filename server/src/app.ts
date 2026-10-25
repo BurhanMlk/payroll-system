@@ -314,6 +314,23 @@ export function createApp(): Express {
     );
   }
 
+  // Serve the production SPA from the same Heroku app when the client build
+  // is present. Hashed assets remain cacheable, while index.html is refreshed
+  // on every deployment so it cannot point to an obsolete bundle.
+  if (env.NODE_ENV === "production") {
+    const clientDist = path.resolve(process.cwd(), "client/dist");
+    app.use(express.static(clientDist, { index: "index.html" }));
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/api/")) {
+        next();
+        return;
+      }
+      res.sendFile(path.join(clientDist, "index.html"), (err) => {
+        if (err) next(err);
+      });
+    });
+  }
+
   // --------------------------------------------------------------------------
   // 404 + GLOBAL ERROR HANDLER
   // --------------------------------------------------------------------------
