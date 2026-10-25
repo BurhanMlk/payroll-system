@@ -23,8 +23,8 @@ export default defineConfig({
     },
   },
   preview: {
-    // Allow serving behind the *.herokuapp.com host (Vite blocks unknown hosts by default).
-    allowedHosts: [".herokuapp.com"],
+    // Allow serving behind the Heroku and custom-domain hosts (Vite blocks unknown hosts by default).
+    allowedHosts: [".herokuapp.com", ".edupayroll.tech"],
   },
   build: {
     outDir: "dist",
