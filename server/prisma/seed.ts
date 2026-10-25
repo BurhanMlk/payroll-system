@@ -514,7 +514,8 @@ async function main() {
   await seedCurrencies();
   await seedSuperAdmin();
 
-  if (env.SEED_DEMO_DATA !== "false") {
+  const demoSeeded = env.SEED_DEMO_DATA !== "false";
+  if (demoSeeded) {
     const tenantA = await seedDemoTenant("ABC College", "abc-college", "professional");
     const tenantB = await seedDemoTenant("XYZ School", "xyz-school", "starter");
     await seedDemoPayroll("abc-college");
@@ -524,7 +525,7 @@ async function main() {
 
   console.log("Seed completed.");
   console.log(`Super Admin login: ${env.SUPER_ADMIN_EMAIL} / ${env.SUPER_ADMIN_PASSWORD}`);
-  console.log("Demo tenant login: admin@abc-college.com / Password@123");
+  if (demoSeeded) console.log("Demo tenant login: admin@abc-college.com / Password@123");
 }
 
 main()
