@@ -1,8 +1,10 @@
 import { Prisma, PayrollStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../lib/errors";
+import { logger } from "../../config/logger";
 import { parsePagination, paginationMeta } from "../../lib/response";
 import { recordAudit } from "../../services/audit.service";
+import { emailPayslipsForRun } from "../../services/payslipMail.service";
 import { calculatePayroll, PayrollCalculationResult, SalaryComponentInput } from "./payroll.calculator";
 import { endOfDay, startOfDay, startOfMonth, endOfMonth } from "../../utils/dates";
 import { toCsv } from "../../utils/csv";
@@ -419,7 +421,20 @@ export async function markPayrollPaid(tenantId: string, id: string, req: Request
   });
 
   await recordAudit({ req, action: "payroll.marked_paid", module: "payroll", recordId: id, recordType: "PayrollRun", previous: { status: run.status }, next: { status: "PAID" } });
+
+  // Payslips are generated automatically and emailed to each employee in the background.
+  void dispatchPayslipEmails(tenantId, id);
+
   return getPayrollRun(tenantId, id);
+}
+
+async function dispatchPayslipEmails(tenantId: string, payrollRunId: string) {
+  try {
+    await ensurePayslipsForRun(tenantId, payrollRunId);
+    await emailPayslipsForRun(tenantId, payrollRunId);
+  } catch (err) {
+    logger.error({ err, tenantId, payrollRunId }, "Failed to dispatch payslip emails");
+  }
 }
 
 export async function lockPayroll(tenantId: string, id: string, req: Request) {
@@ -451,6 +466,19 @@ export async function generatePayslips(tenantId: string, payrollRunId: string, r
   const run = await getPayrollRun(tenantId, payrollRunId);
   if (run.status !== "PAID") throw AppError.badRequest("Payslips can only be generated for paid payroll.");
 
+  const payslips = await ensurePayslipsForRun(tenantId, payrollRunId, run);
+
+  await recordAudit({ req, action: "payslips.generated", module: "payroll", recordId: payrollRunId, recordType: "PayrollRun", metadata: { count: payslips.length } });
+  return payslips;
+}
+
+/** Creates any missing payslip rows for a payroll run (idempotent). */
+async function ensurePayslipsForRun(
+  tenantId: string,
+  payrollRunId: string,
+  run?: { periodStart: Date; periodEnd: Date },
+) {
+  const payrollRun = run ?? (await getPayrollRun(tenantId, payrollRunId));
   const items = await prisma.payrollItem.findMany({
     where: { tenantId, payrollRunId },
     include: { employee: true },
@@ -469,8 +497,8 @@ export async function generatePayslips(tenantId: string, payrollRunId: string, r
         payrollItemId: item.id,
         payrollRunId,
         employeeId: item.employeeId,
-        periodStart: run.periodStart,
-        periodEnd: run.periodEnd,
+        periodStart: payrollRun.periodStart,
+        periodEnd: payrollRun.periodEnd,
         grossSalary: item.grossSalary,
         totalDeductions: item.totalDeductions,
         netSalary: item.netSalary,
@@ -480,9 +508,28 @@ export async function generatePayslips(tenantId: string, payrollRunId: string, r
     });
     payslips.push(payslip);
   }
-
-  await recordAudit({ req, action: "payslips.generated", module: "payroll", recordId: payrollRunId, recordType: "PayrollRun", metadata: { count: payslips.length } });
   return payslips;
+}
+
+/** Generates missing payslips and emails them to employees (manual resend from the admin UI). */
+export async function emailPayslips(tenantId: string, payrollRunId: string, req: Request) {
+  const run = await getPayrollRun(tenantId, payrollRunId);
+  if (run.status !== "PAID" && run.status !== "LOCKED") {
+    throw AppError.badRequest("Payslips can only be emailed for paid payroll.");
+  }
+
+  await ensurePayslipsForRun(tenantId, payrollRunId, run);
+  const summary = await emailPayslipsForRun(tenantId, payrollRunId, { force: true });
+
+  await recordAudit({
+    req,
+    action: "payslips.emailed",
+    module: "payroll",
+    recordId: payrollRunId,
+    recordType: "PayrollRun",
+    metadata: { sent: summary.sent, skipped: summary.skipped, failed: summary.failed },
+  });
+  return summary;
 }
 
 export async function listPayslips(

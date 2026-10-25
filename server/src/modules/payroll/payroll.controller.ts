@@ -11,6 +11,7 @@ import {
   lockPayroll,
   unlockPayroll,
   generatePayslips,
+  emailPayslips,
   listPayslips,
   getPayslip,
   autoGeneratePayslips,
@@ -110,6 +111,14 @@ export async function unlock(req: Request, res: Response, next: NextFunction) {
 export async function makePayslips(req: Request, res: Response, next: NextFunction) {
   try {
     created(res, await generatePayslips(req.tenant!.id, req.params.id, req));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function mailPayslips(req: Request, res: Response, next: NextFunction) {
+  try {
+    ok(res, await emailPayslips(req.tenant!.id, req.params.id, req));
   } catch (err) {
     next(err);
   }

@@ -11,6 +11,7 @@ import {
   lock,
   unlock,
   makePayslips,
+  mailPayslips,
   listSlips,
   getSlip,
   getSlipPdf,
@@ -44,6 +45,7 @@ router.post("/:id/unlock", requireWritableSubscription, requirePermission("payro
 
 // Payslips
 router.post("/:id/payslips", requireWritableSubscription, requirePermission("payroll.mark_paid", "payroll.generate"), makePayslips);
+router.post("/:id/email-payslips", requireWritableSubscription, requirePermission("payroll.mark_paid", "payroll.generate"), mailPayslips);
 router.get("/payslips/list", requireActiveSubscription, requirePermission("payroll.read", "payroll.generate", "payroll.review", "payroll.approve", "payroll.mark_paid"), listSlips);
 router.get("/payslips/:id", requireActiveSubscription, requirePermission("payroll.read", "payroll.generate", "payroll.review", "payroll.approve", "payroll.mark_paid"), getSlip);
 router.get("/payslips/:id/pdf", requireActiveSubscription, requirePermission("payroll.read", "payroll.generate", "payroll.review", "payroll.approve", "payroll.mark_paid"), getSlipPdf);

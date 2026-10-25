@@ -17,11 +17,25 @@ function getTransporter(): Transporter | null {
   return transporter;
 }
 
-export async function sendEmail(to: string, subject: string, html: string, text?: string): Promise<void> {
+export interface EmailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+}
+
+/** Sends an email. Returns false when SMTP is not configured (the message is then skipped). */
+export async function sendEmail(
+  to: string,
+  subject: string,
+  html: string,
+  text?: string,
+  attachments?: EmailAttachment[],
+): Promise<boolean> {
   const t = getTransporter();
   if (!t) {
-    logger.info({ to, subject }, "Email skipped (SMTP not configured)");
-    return;
+    logger.info({ to, subject, attachments: attachments?.length ?? 0 }, "Email skipped (SMTP not configured)");
+    return false;
   }
-  await t.sendMail({ from: env.SMTP_FROM, to, subject, html, text });
+  await t.sendMail({ from: env.SMTP_FROM, to, subject, html, text, attachments });
+  return true;
 }

@@ -16,7 +16,17 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatDate, initials } from "@/lib/utils";
-import { Download, LogOut, FileText, CalendarDays, Banknote, CreditCard, User, Briefcase, Landmark, Building2 } from "lucide-react";
+import { Download, LogOut, FileText, CalendarDays, CalendarClock, Banknote, CreditCard, User, Briefcase, Landmark, Building2 } from "lucide-react";
+
+type SectionKey = "profile" | "payslips" | "attendance" | "leave" | "loans";
+
+const SECTIONS: { key: SectionKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { key: "profile", label: "Personal details", icon: User },
+  { key: "payslips", label: "Payslips", icon: FileText },
+  { key: "attendance", label: "Attendance", icon: CalendarDays },
+  { key: "leave", label: "Leave requests", icon: CalendarClock },
+  { key: "loans", label: "Loans & advances", icon: CreditCard },
+];
 
 interface Payslip {
   id: string;
@@ -83,6 +93,7 @@ export default function EmployeePortalDashboard() {
   const [error, setError] = useState("");
   const [accounts, setAccounts] = useState<InstitutionAccount[]>([]);
   const [switching, setSwitching] = useState(false);
+  const [activeSection, setActiveSection] = useState<SectionKey>("profile");
   const navigate = useNavigate();
 
   const loadProfile = async () => {
@@ -220,15 +231,20 @@ export default function EmployeePortalDashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
+      <main className="mx-auto max-w-6xl px-4 py-6">
         {error && (
-          <Card className="border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <Card className="mb-4 border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {error}
           </Card>
         )}
 
-        {/* Info cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+          <EmployeeSectionNav active={activeSection} onChange={setActiveSection} />
+
+          <div className="min-w-0 flex-1 space-y-6">
+            {/* Personal details (default view) */}
+            {activeSection === "profile" && (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <SectionCard title="Personal Information" icon={<User className="h-4 w-4" />}>
             <InfoRow label="CNIC" value={data.nationalId ?? "—"} />
             <InfoRow label="Father name" value={data.fatherName ?? "—"} />
@@ -253,10 +269,11 @@ export default function EmployeePortalDashboard() {
             <InfoRow label="Bank" value={data.bankName ?? "—"} />
             <InfoRow label="Account" value={data.accountNumber ?? "—"} />
           </SectionCard>
-        </div>
+              </div>
+            )}
 
-        {/* Payslips */}
-        <SectionTable title="My Payslips" icon={<FileText className="h-4 w-4" />}>
+            {activeSection === "payslips" && (
+              <SectionTable title="My Payslips" icon={<FileText className="h-4 w-4" />}>
           <Table>
             <TableHeader>
               <TableRow>
@@ -289,10 +306,11 @@ export default function EmployeePortalDashboard() {
               )}
             </TableBody>
           </Table>
-        </SectionTable>
+              </SectionTable>
+            )}
 
-        {/* Attendance */}
-        <SectionTable title="My Attendance" icon={<CalendarDays className="h-4 w-4" />}>
+            {activeSection === "attendance" && (
+              <SectionTable title="My Attendance" icon={<CalendarDays className="h-4 w-4" />}>
           <Table>
             <TableHeader>
               <TableRow>
@@ -317,10 +335,11 @@ export default function EmployeePortalDashboard() {
               )}
             </TableBody>
           </Table>
-        </SectionTable>
+              </SectionTable>
+            )}
 
-        {/* Leave */}
-        <SectionTable title="My Leave Requests" icon={<CalendarDays className="h-4 w-4" />}>
+            {activeSection === "leave" && (
+              <SectionTable title="My Leave Requests" icon={<CalendarClock className="h-4 w-4" />}>
           <Table>
             <TableHeader>
               <TableRow>
@@ -345,10 +364,11 @@ export default function EmployeePortalDashboard() {
               )}
             </TableBody>
           </Table>
-        </SectionTable>
+              </SectionTable>
+            )}
 
-        {/* Loans & Advances */}
-        <div className="grid gap-4 lg:grid-cols-2">
+            {activeSection === "loans" && (
+              <div className="grid gap-4 lg:grid-cols-2">
           <SectionTable title="My Loans" icon={<CreditCard className="h-4 w-4" />}>
             <Table>
               <TableHeader>
@@ -401,7 +421,10 @@ export default function EmployeePortalDashboard() {
                 )}
               </TableBody>
             </Table>
-          </SectionTable>
+                </SectionTable>
+              </div>
+            )}
+          </div>
         </div>
       </main>
     </div>
@@ -426,6 +449,33 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
       <span className="text-muted-foreground">{label}</span>
       <span className="text-right font-medium">{value}</span>
     </div>
+  );
+}
+
+function EmployeeSectionNav({ active, onChange }: { active: SectionKey; onChange: (key: SectionKey) => void }) {
+  return (
+    <nav className="lg:w-56 lg:shrink-0">
+      <div className="flex gap-1 overflow-x-auto rounded-lg border bg-white p-1 shadow-sm lg:flex-col lg:overflow-visible">
+        {SECTIONS.map((section) => {
+          const Icon = section.icon;
+          const isActive = section.key === active;
+          return (
+            <button
+              key={section.key}
+              type="button"
+              onClick={() => onChange(section.key)}
+              aria-current={isActive ? "page" : undefined}
+              className={`flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors lg:w-full ${
+                isActive ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              <span>{section.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </nav>
   );
 }
 
