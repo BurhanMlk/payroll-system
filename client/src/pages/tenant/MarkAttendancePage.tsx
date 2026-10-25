@@ -139,7 +139,7 @@ export default function MarkAttendancePage() {
           <Button onClick={() => saveDeduction.mutate(Number(deduction || 0))} disabled={saveDeduction.isPending}>
             <Save className="h-4 w-4" /> Save Deduction
           </Button>
-          <p className="text-xs text-muted-foreground">0 = no deduction. Ye amount har leave/absent din par salary se katega.</p>
+          <p className="text-xs text-muted-foreground">0 = no deduction.</p>
         </div>
       </Card>
 
