@@ -120,7 +120,7 @@ See [`.env.example`](./.env.example) for the full annotated list. Key variables:
 
 | Variable | Purpose |
 |----------|---------|
-| `DATABASE_URL` | PostgreSQL connection string |
+| `DATABASE_URL` | PostgreSQL connection string (Supabase session pooler in prod) |
 | `REDIS_URL` | Redis connection string |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | Token signing secrets (min 32 chars) |
 | `BCRYPT_ROUNDS` | Password hashing cost |
@@ -143,6 +143,26 @@ npm run db:seed -w server         # seed permissions, plans, demo data
 ```
 
 The Prisma schema (`server/prisma/schema.prisma`) defines 50+ normalized models with foreign keys, indexes, and tenant-scoped unique constraints.
+
+### Supabase (production database)
+
+Production runs on Supabase Postgres (project `gzyweswnvzkevcmqgytx`, region `ap-northeast-1`) as a plain PostgreSQL connection — no Supabase client library or RLS policies are used, Prisma remains the only data layer.
+
+The connection string uses the **session pooler** (port `5432`), which supports both Prisma runtime queries and `prisma migrate deploy`:
+
+```
+postgresql://postgres.<project-ref>:<password>@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres?connection_limit=5
+```
+
+> Do **not** use the transaction pooler (port `6543`) here: Prisma migrations take session-level advisory locks and hang through pgbouncer transaction mode.
+
+Notes:
+
+- `%40` must be used in place of `@` when the database password contains an `@`.
+- Keep `connection_limit` low (5) so dynos and local sessions stay within Supabase's connection budget.
+- Point `DATABASE_URL` at the session pooler in both `.env` (Docker/local) and the Heroku config vars. The local `docker compose` Postgres URLs are kept commented in `.env` for offline development.
+- Apply schema changes with `npm run db:migrate -w server`; the Heroku `release` phase runs the same command on every deploy.
+- Row Level Security is enabled on every `public` table. The app connects as the `postgres` role (which has `bypassrls`), so Prisma is unaffected, while Supabase's auto-generated REST API cannot read or write tenant data with an `anon`/`authenticated` key. Enable RLS on any new table created outside Prisma migrations.
 
 ---
 
