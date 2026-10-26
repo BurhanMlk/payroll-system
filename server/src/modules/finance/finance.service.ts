@@ -6,13 +6,19 @@ import { recordAudit } from "../../services/audit.service";
 import { Request } from "express";
 
 export interface LoanInput {
-  loanNumber: string;
+  loanNumber?: string;
   employeeId: string;
   loanAmount: number;
-  issueDate: Date;
+  issueDate?: Date | string;
   installments: number;
-  startMonth: Date;
+  startMonth?: Date | string;
   notes?: string;
+}
+
+function generateLoanNumber(date: Date): string {
+  const ym = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}`;
+  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `LN-${ym}-${rand}`;
 }
 
 export async function listLoans(
@@ -56,19 +62,23 @@ export async function createLoan(tenantId: string, input: LoanInput, req: Reques
   if (input.loanAmount <= 0) throw AppError.badRequest("Loan amount must be positive.");
   if (input.installments <= 0) throw AppError.badRequest("Installments must be at least 1.");
 
+  const now = new Date();
+  const issueDate = input.issueDate ? new Date(input.issueDate) : now;
+  const startMonth = input.startMonth ? new Date(input.startMonth) : new Date(now.getFullYear(), now.getMonth(), 1);
+  const loanNumber = input.loanNumber?.trim() || generateLoanNumber(now);
   const installmentAmount = Math.round((input.loanAmount / input.installments) * 100) / 100;
   const loan = await prisma.employeeLoan.create({
     data: {
       tenantId,
-      loanNumber: input.loanNumber,
+      loanNumber,
       employeeId: input.employeeId,
       loanAmount: new Prisma.Decimal(input.loanAmount),
       approvedAmount: new Prisma.Decimal(input.loanAmount),
-      issueDate: input.issueDate,
+      issueDate,
       installmentCount: input.installments,
       installmentAmount: new Prisma.Decimal(installmentAmount),
       remainingBalance: new Prisma.Decimal(input.loanAmount),
-      startMonth: input.startMonth,
+      startMonth,
       status: "PENDING",
       notes: input.notes,
     },
@@ -110,7 +120,7 @@ export async function getLoanRepaymentHistory(tenantId: string, id: string) {
 export interface AdvanceInput {
   employeeId: string;
   amount: number;
-  issueDate: Date;
+  issueDate?: Date | string;
   installments: number;
   notes?: string;
 }
@@ -144,13 +154,14 @@ export async function createAdvance(tenantId: string, input: AdvanceInput, req: 
 
   const installments = Math.max(1, input.installments);
   const installmentAmount = Math.round((input.amount / installments) * 100) / 100;
+  const issueDate = input.issueDate ? new Date(input.issueDate) : new Date();
   const advance = await prisma.salaryAdvance.create({
     data: {
       tenantId,
       employeeId: input.employeeId,
       amount: new Prisma.Decimal(input.amount),
       remaining: new Prisma.Decimal(input.amount),
-      issueDate: input.issueDate,
+      issueDate,
       installments,
       installmentAmount: new Prisma.Decimal(installmentAmount),
       status: "PENDING",

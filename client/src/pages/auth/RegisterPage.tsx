@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
 import { api, errorMessage } from "@/lib/api";
+import { isValidMobile } from "@/lib/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,10 +24,13 @@ const schema = z.object({
     .regex(/[0-9]/, "Needs a number"),
   institutionName: z.string().min(2, "Institution name is required"),
   institutionType: z.enum(["SCHOOL", "COLLEGE", "UNIVERSITY", "ACADEMY", "TRAINING_INSTITUTE", "OTHER"]),
-  institutionEmail: z.string().optional(),
-  phone: z.string().optional(),
+  institutionEmail: z.string().email("Enter a valid institution email"),
+  phone: z
+    .string()
+    .trim()
+    .refine((v) => v.length > 0 && isValidMobile(v), "Enter a valid mobile number"),
   website: z.string().optional(),
-  address: z.string().optional(),
+  address: z.string().min(1, "Address is required"),
   city: z.string().optional(),
   country: z.string().optional(),
   currency: z.string().length(3, "3-letter currency code"),
@@ -129,10 +133,10 @@ export default function RegisterPage() {
         password: values.password,
         institutionName: values.institutionName.trim(),
         institutionType: values.institutionType,
-        institutionEmail: values.institutionEmail?.trim() || undefined,
-        phone: values.phone?.trim() || undefined,
+        institutionEmail: values.institutionEmail.trim(),
+        phone: values.phone.trim(),
         website: values.website?.trim() || undefined,
-        address: values.address?.trim() || undefined,
+        address: values.address.trim(),
         city: values.city?.trim() || undefined,
         country: values.country?.trim() || undefined,
         currency: values.currency.trim().toUpperCase(),
@@ -151,7 +155,7 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-muted/30 py-10">
-      <div className="mx-auto max-w-3xl px-4">
+      <div className="mx-auto max-w-5xl px-4">
         <div className="mb-8 text-center">
           <Logo className="mx-auto mb-3 h-14 w-14" />
           <h1 className="text-2xl font-semibold tracking-tight">Create your institution account</h1>
@@ -160,24 +164,18 @@ export default function RegisterPage() {
 
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
           <section className="rounded-xl border bg-card p-6 shadow-sm">
-            <h2 className="mb-4 text-base font-semibold">1. Your account</h2>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Full name" error={form.formState.errors.fullName?.message}>
+            <h2 className="mb-4 text-base font-semibold">Account &amp; Institution details</h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Full name" required error={form.formState.errors.fullName?.message}>
                 <Input placeholder="Jane Doe" {...form.register("fullName")} />
               </Field>
-              <Field label="Work email" error={form.formState.errors.email?.message}>
+              <Field label="Work email" required error={form.formState.errors.email?.message}>
                 <Input type="email" placeholder="you@institution.edu" {...form.register("email")} />
               </Field>
-              <Field label="Password" error={form.formState.errors.password?.message}>
+              <Field label="Password" required error={form.formState.errors.password?.message}>
                 <Input type="password" {...form.register("password")} />
               </Field>
-            </div>
-          </section>
-
-          <section className="rounded-xl border bg-card p-6 shadow-sm">
-            <h2 className="mb-4 text-base font-semibold">2. Institution details</h2>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Institution name" error={form.formState.errors.institutionName?.message}>
+              <Field label="Institution name" required error={form.formState.errors.institutionName?.message}>
                 <Input placeholder="ABC College" {...form.register("institutionName")} />
               </Field>
               <Field label="Institution type" error={form.formState.errors.institutionType?.message}>
@@ -190,11 +188,11 @@ export default function RegisterPage() {
                   <option value="OTHER">Other</option>
                 </select>
               </Field>
-              <Field label="Institution email" error={form.formState.errors.institutionEmail?.message}>
+              <Field label="Institution email" required error={form.formState.errors.institutionEmail?.message}>
                 <Input placeholder="info@abc.edu" {...form.register("institutionEmail")} />
               </Field>
-              <Field label="Website" error={form.formState.errors.website?.message}>
-                <Input placeholder="https://abc.edu" {...form.register("website")} />
+              <Field label="Phone" required error={form.formState.errors.phone?.message}>
+                <Input placeholder="03xx-xxxxxxx" {...form.register("phone")} />
               </Field>
               <Field label="Country" error={form.formState.errors.country?.message}>
                 <select className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm" {...form.register("country")}>
@@ -203,9 +201,6 @@ export default function RegisterPage() {
                     <option key={c.code} value={c.code}>{c.name}</option>
                   ))}
                 </select>
-              </Field>
-              <Field label="Phone">
-                <Input {...form.register("phone")} />
               </Field>
               <Field label="City" error={form.formState.errors.city?.message}>
                 {addingCity ? (
@@ -239,11 +234,12 @@ export default function RegisterPage() {
               <Field label="Currency">
                 <Input readOnly {...form.register("currency")} />
               </Field>
-              <div className="sm:col-span-2">
-                <Field label="Address" error={form.formState.errors.address?.message}>
-                  <Input placeholder="Street, city, state" {...form.register("address")} />
-                </Field>
-              </div>
+              <Field label="Address" required error={form.formState.errors.address?.message}>
+                <Input placeholder="Street, city, state" {...form.register("address")} />
+              </Field>
+              <Field label="Website" error={form.formState.errors.website?.message}>
+                <Input placeholder="https://abc.edu" {...form.register("website")} />
+              </Field>
             </div>
           </section>
 
@@ -319,10 +315,13 @@ export default function RegisterPage() {
   );
 }
 
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+function Field({ label, error, required, children }: { label: string; error?: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <Label>{label}</Label>
+      <Label>
+        {label}
+        {required && <span className="text-destructive"> *</span>}
+      </Label>
       {children}
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>

@@ -27,7 +27,7 @@ export async function createHoliday(tenantId: string, input: HolidayInput, req: 
     data: {
       tenantId,
       name: input.name,
-      date: input.date,
+      date: new Date(input.date),
       branchId: input.branchId ?? null,
       isRecurring: input.isRecurring ?? false,
     },
@@ -39,7 +39,12 @@ export async function createHoliday(tenantId: string, input: HolidayInput, req: 
 export async function updateHoliday(tenantId: string, id: string, input: Partial<HolidayInput>, req: Request) {
   const existing = await prisma.holiday.findFirst({ where: { id, tenantId } });
   if (!existing) throw AppError.notFound("Holiday not found.");
-  const holiday = await prisma.holiday.update({ where: { id }, data: input });
+  const data: { name?: string; date?: Date; branchId?: string | null; isRecurring?: boolean } = {};
+  if (input.name !== undefined) data.name = input.name;
+  if (input.date !== undefined) data.date = new Date(input.date);
+  if (input.branchId !== undefined) data.branchId = input.branchId ?? null;
+  if (input.isRecurring !== undefined) data.isRecurring = input.isRecurring;
+  const holiday = await prisma.holiday.update({ where: { id }, data });
   await recordAudit({ req, action: "holiday.updated", module: "attendance", recordId: id, recordType: "Holiday", previous: existing, next: input });
   return holiday;
 }

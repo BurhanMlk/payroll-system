@@ -13,10 +13,17 @@ export const onboardingSchema = z.object({
   // Step 2 — institution
   institutionName: z.string().min(2, "Institution name is required"),
   institutionType: z.enum(["SCHOOL", "COLLEGE", "UNIVERSITY", "ACADEMY", "TRAINING_INSTITUTE", "OTHER"]),
-  institutionEmail: z.string().optional(),
-  phone: z.string().optional(),
+  institutionEmail: z.string().email("A valid institution email is required"),
+  phone: z
+    .string()
+    .trim()
+    .refine((v) => {
+      if (!v) return false;
+      const digits = v.replace(/\D/g, "");
+      return digits.length >= 10 && digits.length <= 15;
+    }, "Enter a valid mobile number"),
   website: z.string().optional(),
-  address: z.string().optional(),
+  address: z.string().min(1, "Address is required"),
   country: z.string().optional(),
   city: z.string().optional(),
   currency: z.string().length(3, "Currency must be a 3-letter ISO code"),

@@ -14,6 +14,7 @@ import { useToast } from "@/components/ui/toast";
 import { formatCurrency } from "@/lib/utils";
 import type { Employee, PaginationMeta } from "@/lib/types";
 import { useAuth } from "@/contexts/AuthContext";
+import { formatCnic, formatPhoneNumber, isValidCnic, isValidPhoneNumber } from "@/lib/validation";
 import { Search, Plus, Users, X, Pencil, Trash2 } from "lucide-react";
 
 interface EmployeeResponse {
@@ -27,12 +28,6 @@ interface Country {
   currency: string;
   rate: number;
   cities: string[];
-}
-
-function formatCnic(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 13);
-  const parts = [digits.slice(0, 5), digits.slice(5, 12), digits.slice(12, 13)];
-  return parts.filter(Boolean).join("-");
 }
 
 function toDateInput(value: string | null | undefined): string {
@@ -225,6 +220,7 @@ function AddEmployeeDialog({ open, editing, onClose, onCreated }: { open: boolea
   const { user, refreshUser } = useAuth();
   const tenantCurrency = user?.tenant?.currency ?? "USD";
   const [form, setForm] = useState<EmployeeForm>(EMPTY_FORM);
+  const [errors, setErrors] = useState<Partial<Record<"nationalId" | "phone" | "emergencyContact", string>>>({});
   const [submitting, setSubmitting] = useState(false);
 
   const { data: branches } = useQuery({
@@ -272,6 +268,7 @@ function AddEmployeeDialog({ open, editing, onClose, onCreated }: { open: boolea
     } else {
       setForm({ ...EMPTY_FORM, currency: tenantCurrency });
     }
+    setErrors({});
   }, [open, editing, tenantCurrency]);
 
   if (!open) return null;
@@ -280,6 +277,23 @@ function AddEmployeeDialog({ open, editing, onClose, onCreated }: { open: boolea
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+
+    const validationErrors: Partial<Record<"nationalId" | "phone" | "emergencyContact", string>> = {};
+    if (form.nationalId && !isValidCnic(form.nationalId)) {
+      validationErrors.nationalId = "CNIC must be 13 digits (e.g. 12345-1234567-1)";
+    }
+    if (form.phone && !isValidPhoneNumber(form.phone)) {
+      validationErrors.phone = "Phone must be 11 digits";
+    }
+    if (form.emergencyContact && !isValidPhoneNumber(form.emergencyContact)) {
+      validationErrors.emergencyContact = "Emergency contact must be 11 digits";
+    }
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      toast({ title: "Please fix the highlighted fields", variant: "destructive" });
+      return;
+    }
+    setErrors({});
     setSubmitting(true);
     try {
       const payload = {
@@ -359,6 +373,7 @@ function AddEmployeeDialog({ open, editing, onClose, onCreated }: { open: boolea
           <div className="space-y-1.5">
             <Label>CNIC</Label>
             <Input value={form.nationalId} onChange={(e) => set("nationalId", formatCnic(e.target.value))} placeholder="12345-1234567-1" maxLength={15} />
+            {errors.nationalId && <p className="text-xs text-destructive">{errors.nationalId}</p>}
           </div>
           <div className="space-y-1.5">
             <Label>Father name</Label>
@@ -387,7 +402,14 @@ function AddEmployeeDialog({ open, editing, onClose, onCreated }: { open: boolea
           </div>
           <div className="space-y-1.5">
             <Label>Phone</Label>
-            <Input value={form.phone} onChange={(e) => set("phone", e.target.value)} />
+            <Input
+              type="tel"
+              inputMode="numeric"
+              value={form.phone}
+              maxLength={11}
+              onChange={(e) => set("phone", formatPhoneNumber(e.target.value))}
+            />
+            {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
           </div>
           <div className="space-y-1.5">
             <Label>Address</Label>
@@ -395,7 +417,14 @@ function AddEmployeeDialog({ open, editing, onClose, onCreated }: { open: boolea
           </div>
           <div className="space-y-1.5">
             <Label>Emergency contact</Label>
-            <Input value={form.emergencyContact} onChange={(e) => set("emergencyContact", e.target.value)} />
+            <Input
+              type="tel"
+              inputMode="numeric"
+              value={form.emergencyContact}
+              maxLength={11}
+              onChange={(e) => set("emergencyContact", formatPhoneNumber(e.target.value))}
+            />
+            {errors.emergencyContact && <p className="text-xs text-destructive">{errors.emergencyContact}</p>}
           </div>
           <div className="space-y-1.5">
             <Label>Country / Currency</Label>

@@ -75,15 +75,7 @@ export async function generatePayroll(tenantId: string, opts: GenerateOptions, r
 
   for (const employee of employees) {
     const structure = employee.salaryStructures[0];
-    if (!structure) {
-      exceptions.push({
-        employeeId: employee.id,
-        employeeNumber: employee.employeeNumber,
-        type: "MISSING_SALARY",
-        message: "No active salary structure assigned.",
-      });
-      continue;
-    }
+    const basicSalary = structure ? structure.basicSalary.toNumber() : employee.basicSalary.toNumber();
     if (!employee.accountNumber) {
       exceptions.push({
         employeeId: employee.id,
@@ -95,7 +87,7 @@ export async function generatePayroll(tenantId: string, opts: GenerateOptions, r
 
     const attendance = await summarizeAttendance(tenantId, employee.id, periodStart, periodEnd);
     attendance.workingDays = workingDays;
-    const hourlyRate = structure.basicSalary.toNumber() / workingDays / 8;
+    const hourlyRate = basicSalary / workingDays / 8;
     const overtimeRatePerHour = hourlyRate * cycle.overtimeRate.toNumber();
 
     // Active loan installment.
@@ -116,9 +108,9 @@ export async function generatePayroll(tenantId: string, opts: GenerateOptions, r
       ? Math.min(advance.installmentAmount.toNumber(), advance.remaining.toNumber())
       : 0;
 
-    const components = (structure.components as unknown as SalaryComponentInput[]) ?? [];
+    const components = (structure?.components as unknown as SalaryComponentInput[]) ?? [];
     const result = calculatePayroll({
-      basicSalary: structure.basicSalary.toNumber(),
+      basicSalary,
       components,
       attendance,
       overtimeRatePerHour,
@@ -594,8 +586,9 @@ async function summarizeAttendance(tenantId: string, employeeId: string, from: D
   return summary;
 }
 
-// ---- Auto payslips (attendance-driven, no approval flow) ------------------
-// Leave rule: no leave = full salary; more than 1 leave day = 500/day deducted.
+// ---- Auto payslips (attendance-driven draft, approved/paid by admin) ------
+// Leave rule: absent + unpaid leave days are deducted at the configured
+// per-day rate. Paid leave days do not reduce salary.
 
 export async function autoGeneratePayslips(tenantId: string, periodStart: Date, periodEnd: Date, req: Request) {
   const employees = await prisma.employee.findMany({
@@ -618,6 +611,8 @@ export async function autoGeneratePayslips(tenantId: string, periodStart: Date, 
     employee: (typeof employees)[number];
     presentDays: number;
     absentDays: number;
+    paidLeaveDays: number;
+    unpaidLeaveDays: number;
     leaveDays: number;
     basic: number;
     leaveDeduction: number;
@@ -635,6 +630,8 @@ export async function autoGeneratePayslips(tenantId: string, periodStart: Date, 
       employee: emp,
       presentDays: att.presentDays,
       absentDays: att.absentDays,
+      paidLeaveDays: att.paidLeaveDays,
+      unpaidLeaveDays: att.unpaidLeaveDays,
       leaveDays,
       basic,
       leaveDeduction,
@@ -658,7 +655,7 @@ export async function autoGeneratePayslips(tenantId: string, periodStart: Date, 
         periodStart,
         periodEnd,
         payDate: new Date(),
-        status: "PAID",
+        status: "CALCULATED",
         totalGross: new Prisma.Decimal(totalGross),
         totalDeductions: new Prisma.Decimal(totalDeductions),
         totalNet: new Prisma.Decimal(totalNet),
@@ -679,11 +676,13 @@ export async function autoGeneratePayslips(tenantId: string, periodStart: Date, 
           netSalary: new Prisma.Decimal(r.net),
           presentDays: new Prisma.Decimal(r.presentDays),
           absentDays: new Prisma.Decimal(r.absentDays),
-          unpaidLeaveDays: new Prisma.Decimal(r.leaveDays),
+          paidLeaveDays: new Prisma.Decimal(r.paidLeaveDays),
+          unpaidLeaveDays: new Prisma.Decimal(r.unpaidLeaveDays),
           snapshot: {},
         },
       });
 
+      // Payslip is visible immediately, but stays UNPAID until admin marks paid.
       await tx.payslip.create({
         data: {
           tenantId,
@@ -695,8 +694,7 @@ export async function autoGeneratePayslips(tenantId: string, periodStart: Date, 
           grossSalary: new Prisma.Decimal(r.basic),
           totalDeductions: new Prisma.Decimal(r.leaveDeduction),
           netSalary: new Prisma.Decimal(r.net),
-          paymentStatus: "PAID",
-          paymentDate: new Date(),
+          paymentStatus: "UNPAID",
         },
       });
     }

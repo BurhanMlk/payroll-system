@@ -1,16 +1,32 @@
 import { z } from "zod";
 
+const optionalCnic = z
+  .string()
+  .trim()
+  .refine((v) => !v || v.replace(/\D/g, "").length === 13, "CNIC must be 13 digits")
+  .optional();
+
+const optionalMobile = z
+  .string()
+  .trim()
+  .refine((v) => {
+    if (!v) return true;
+    const digits = v.replace(/\D/g, "");
+    return digits.length >= 10 && digits.length <= 15;
+  }, "Enter a valid mobile number")
+  .optional();
+
 export const employeeCreateSchema = z.object({
   employeeNumber: z.string().optional(),
   currency: z.string().length(3, "Currency must be a 3-letter ISO code").optional(),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   fatherName: z.string().optional(),
-  nationalId: z.string().optional(),
+  nationalId: optionalCnic,
   dateOfBirth: z.coerce.date().optional(),
   gender: z.enum(["MALE", "FEMALE", "OTHER"]).optional(),
-  phone: z.string().optional(),
-  alternatePhone: z.string().optional(),
+  phone: optionalMobile,
+  alternatePhone: optionalMobile,
   email: z.string().email().optional().or(z.literal("")),
   address: z.string().optional(),
   emergencyContact: z.string().optional(),

@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, CheckCircle2, XCircle, Trash2 } from "lucide-react";
+import { Plus, Search, CheckCircle2, XCircle, Trash2 } from "lucide-react";
 
 interface Loan {
   id: string;
@@ -25,12 +25,20 @@ interface Loan {
   employee: { employeeNumber: string; firstName: string; lastName: string };
 }
 
+interface EmployeeOption {
+  id: string;
+  employeeNumber: string;
+  firstName: string;
+  lastName: string;
+}
+
 export default function LoansPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const currency = user?.tenant?.currency ?? "USD";
   const qc = useQueryClient();
   const [form, setForm] = useState({ employeeNumber: "", amount: "", installments: "12" });
+  const [foundEmployee, setFoundEmployee] = useState<EmployeeOption | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["loans"],
@@ -58,19 +66,41 @@ export default function LoansPage() {
     onError: (err) => toast({ title: "Failed", description: errorMessage(err), variant: "destructive" }),
   });
 
+  const searchEmployee = useMutation({
+    mutationFn: async () => {
+      const res = await api.get("/employees", { params: { search: form.employeeNumber, limit: 5 } });
+      return res.data.data as EmployeeOption[];
+    },
+    onSuccess: (employees) => {
+      if (employees.length === 0) {
+        setFoundEmployee(null);
+        toast({ title: "Employee not found", description: "No employee matches this employee number.", variant: "destructive" });
+        return;
+      }
+      setFoundEmployee(employees[0]);
+      if (employees.length > 1) {
+        toast({ title: "Multiple matches", description: "Showing the first match. Refine the employee number.", variant: "success" });
+      }
+    },
+    onError: (err) => toast({ title: "Search failed", description: errorMessage(err), variant: "destructive" }),
+  });
+
   const createLoan = useMutation({
     mutationFn: async () => {
-      const emp = await api.get("/employees", { params: { search: form.employeeNumber, limit: 1 } });
-      const employee = emp.data.data[0];
-      if (!employee) throw new Error("Employee not found");
-      return api.post("/finance/loans", { employeeId: employee.id, loanAmount: Number(form.amount), installments: Number(form.installments) });
+      if (!foundEmployee) throw new Error("Search the employee number first");
+      return api.post("/finance/loans", {
+        employeeId: foundEmployee.id,
+        loanAmount: Number(form.amount),
+        installments: Number(form.installments),
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["loans"] });
       setForm({ employeeNumber: "", amount: "", installments: "12" });
+      setFoundEmployee(null);
       toast({ title: "Loan created", variant: "success" });
     },
-    onError: (err) => toast({ title: "Failed", description: errorMessage(err), variant: "destructive" }),
+    onError: (err) => toast({ title: "Failed", description: errorMessage(err, "Unable to create loan."), variant: "destructive" }),
   });
 
   return (
@@ -81,7 +111,21 @@ export default function LoansPage() {
         <div className="grid gap-3 sm:grid-cols-4">
           <div className="space-y-1.5">
             <Label>Employee number</Label>
-            <Input placeholder="EMP-001" value={form.employeeNumber} onChange={(e) => setForm({ ...form, employeeNumber: e.target.value })} />
+            <div className="flex gap-2">
+              <Input
+                placeholder="EMP-001"
+                value={form.employeeNumber}
+                onChange={(e) => { setForm({ ...form, employeeNumber: e.target.value }); setFoundEmployee(null); }}
+              />
+              <Button type="button" size="sm" variant="outline" onClick={() => searchEmployee.mutate()} disabled={!form.employeeNumber || searchEmployee.isPending}>
+                <Search className="h-4 w-4" /> Search
+              </Button>
+            </div>
+            {foundEmployee && (
+              <p className="text-xs text-emerald-600">
+                {foundEmployee.firstName} {foundEmployee.lastName} ({foundEmployee.employeeNumber})
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label>Loan amount</Label>
@@ -92,7 +136,7 @@ export default function LoansPage() {
             <Input type="number" value={form.installments} onChange={(e) => setForm({ ...form, installments: e.target.value })} />
           </div>
           <div className="flex items-end">
-            <Button size="sm" onClick={() => createLoan.mutate()} disabled={!form.employeeNumber || !form.amount}>
+            <Button size="sm" onClick={() => createLoan.mutate()} disabled={!foundEmployee || !form.amount}>
               <Plus className="h-4 w-4" /> Create Loan
             </Button>
           </div>

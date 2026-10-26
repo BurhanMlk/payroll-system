@@ -47,8 +47,14 @@ export async function list(req: Request, res: Response, next: NextFunction) {
 
 export async function summary(req: Request, res: Response, next: NextFunction) {
   try {
-    const date = req.query.date ? new Date(String(req.query.date)) : new Date();
-    ok(res, await attendanceSummary(req.tenant!.id, date));
+    const monthParam = req.query.month ? String(req.query.month) : undefined;
+    const [y, m] = (monthParam ?? "").split("-").map(Number);
+    const now = new Date();
+    const year = Number.isInteger(y) ? y : now.getFullYear();
+    const monthIndex = Number.isInteger(m) && m >= 1 && m <= 12 ? m - 1 : now.getMonth();
+    const from = new Date(year, monthIndex, 1);
+    const to = new Date(year, monthIndex + 1, 0, 23, 59, 59);
+    ok(res, await attendanceSummary(req.tenant!.id, from, to));
   } catch (err) {
     next(err);
   }
@@ -71,12 +77,17 @@ export async function importFile(req: Request, res: Response, next: NextFunction
     }
     const result = await importAttendanceFile(req.tenant!.id, req.file, req);
 
-    // Auto-generate payslips for the current month after attendance is imported.
+    // Auto-generate payslips for the month(s) present in the uploaded file.
+    // When the file has no dates, fall back to the current month.
     let payslipsGenerated = 0;
     try {
       const now = new Date();
-      const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+      const periodStart = result.periodStart
+        ? new Date(result.periodStart.getFullYear(), result.periodStart.getMonth(), 1)
+        : new Date(now.getFullYear(), now.getMonth(), 1);
+      const periodEnd = result.periodEnd
+        ? new Date(result.periodEnd.getFullYear(), result.periodEnd.getMonth() + 1, 0, 23, 59, 59)
+        : new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
       const run = await autoGeneratePayslips(req.tenant!.id, periodStart, periodEnd, req);
       payslipsGenerated = run.employeeCount;
     } catch {

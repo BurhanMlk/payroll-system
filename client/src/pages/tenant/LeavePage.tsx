@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "@/lib/api";
 import { PageHeader } from "@/components/PageHeader";
@@ -6,9 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Badge, statusVariant } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toast";
 import { formatDate } from "@/lib/utils";
-import { CheckCircle2, XCircle, Trash2 } from "lucide-react";
+import { CheckCircle2, XCircle, Trash2, Search } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface LeaveRequest {
@@ -22,10 +25,26 @@ interface LeaveRequest {
   leaveType: { name: string; isPaid: boolean };
 }
 
+interface EmployeeOption {
+  id: string;
+  employeeNumber: string;
+  firstName: string;
+  lastName: string;
+}
+
+interface AttendanceRecord {
+  id: string;
+  date: string;
+  status: string;
+}
+
 export default function LeavePage() {
   const { toast } = useToast();
   const { hasPermission } = useAuth();
   const qc = useQueryClient();
+  const [empSearch, setEmpSearch] = useState("");
+  const [foundEmployee, setFoundEmployee] = useState<EmployeeOption | null>(null);
+  const [historyMonth, setHistoryMonth] = useState(() => new Date().toISOString().slice(0, 7));
 
   const { data, isLoading } = useQuery({
     queryKey: ["leave-requests"],
@@ -54,6 +73,45 @@ export default function LeavePage() {
     onError: (err) => toast({ title: "Failed", description: errorMessage(err), variant: "destructive" }),
   });
 
+  const searchEmployee = useMutation({
+    mutationFn: async () => {
+      const res = await api.get("/employees", { params: { search: empSearch, limit: 5 } });
+      return res.data.data as EmployeeOption[];
+    },
+    onSuccess: (employees) => {
+      if (employees.length === 0) {
+        setFoundEmployee(null);
+        toast({ title: "Employee not found", description: "No employee matches this ID or name.", variant: "destructive" });
+        return;
+      }
+      setFoundEmployee(employees[0]);
+    },
+    onError: (err) => toast({ title: "Search failed", description: errorMessage(err), variant: "destructive" }),
+  });
+
+  const [monthStart, monthEnd] = (() => {
+    const [y, m] = historyMonth.split("-").map(Number);
+    const start = new Date(y, (m ?? 1) - 1, 1).toISOString().slice(0, 10);
+    const end = new Date(y, m ?? 1, 0).toISOString().slice(0, 10);
+    return [start, end];
+  })();
+
+  const { data: leaveHistory, isLoading: historyLoading } = useQuery({
+    queryKey: ["leave-history", foundEmployee?.id, historyMonth],
+    enabled: Boolean(foundEmployee),
+    queryFn: async () => {
+      const res = await api.get("/attendance", {
+        params: { employeeId: foundEmployee?.id, from: monthStart, to: monthEnd, limit: 100 },
+      });
+      const items = res.data.data as AttendanceRecord[];
+      return items.filter((a) => ["PAID_LEAVE", "UNPAID_LEAVE", "ABSENT"].includes(a.status));
+    },
+  });
+
+  const paidCount = leaveHistory?.filter((a) => a.status === "PAID_LEAVE").length ?? 0;
+  const unpaidCount = leaveHistory?.filter((a) => a.status === "UNPAID_LEAVE").length ?? 0;
+  const absentCount = leaveHistory?.filter((a) => a.status === "ABSENT").length ?? 0;
+
   const pending = data?.filter((l) => l.status === "PENDING").length ?? 0;
   const approved = data?.filter((l) => l.status === "APPROVED").length ?? 0;
   const rejected = data?.filter((l) => l.status === "REJECTED").length ?? 0;
@@ -67,6 +125,61 @@ export default function LeavePage() {
         <SummaryCard label="Approved" value={approved} className="text-emerald-600" />
         <SummaryCard label="Rejected" value={rejected} className="text-red-600" />
       </div>
+
+      <Card className="mb-6 p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1.5">
+            <Label>Employee ID or name</Label>
+            <div className="flex gap-2">
+              <Input placeholder="Search employee" value={empSearch} onChange={(e) => { setEmpSearch(e.target.value); setFoundEmployee(null); }} />
+              <Button type="button" size="sm" variant="outline" onClick={() => searchEmployee.mutate()} disabled={!empSearch || searchEmployee.isPending}>
+                <Search className="h-4 w-4" /> Search
+              </Button>
+            </div>
+            {foundEmployee && (
+              <p className="text-xs text-emerald-600">
+                {foundEmployee.firstName} {foundEmployee.lastName} ({foundEmployee.employeeNumber})
+              </p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label>Month</Label>
+            <Input type="month" value={historyMonth} onChange={(e) => setHistoryMonth(e.target.value)} className="w-44" />
+          </div>
+        </div>
+
+        {foundEmployee && (
+          <div className="mt-4">
+            <div className="mb-3 flex flex-wrap gap-3 text-sm">
+              <span className="rounded-md bg-emerald-50 px-2 py-1 text-emerald-700">Paid leave: {paidCount}</span>
+              <span className="rounded-md bg-red-50 px-2 py-1 text-red-700">Unpaid leave: {unpaidCount}</span>
+              <span className="rounded-md bg-amber-50 px-2 py-1 text-amber-700">Absent: {absentCount}</span>
+            </div>
+            {historyLoading ? (
+              <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
+            ) : (leaveHistory?.length ?? 0) === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">No leave records for this employee in this month.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {leaveHistory?.map((a) => (
+                    <TableRow key={a.id}>
+                      <TableCell className="text-muted-foreground">{formatDate(a.date)}</TableCell>
+                      <TableCell><Badge variant={statusVariant(a.status)}>{a.status.toLowerCase().replace("_", " ")}</Badge></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        )}
+      </Card>
 
       <Card className="overflow-hidden">
         {isLoading ? (

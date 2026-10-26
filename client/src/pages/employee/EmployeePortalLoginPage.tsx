@@ -8,6 +8,7 @@ import {
   InstitutionAccount,
 } from "@/lib/employeeApi";
 import { errorMessage } from "@/lib/api";
+import { isValidCnic } from "@/lib/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,6 +31,10 @@ export default function EmployeePortalLoginPage() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!isValidCnic(cnic)) {
+      setError("Enter a valid 13-digit CNIC (e.g. 12345-1234567-1).");
+      return;
+    }
     setLoading(true);
     setError("");
     try {

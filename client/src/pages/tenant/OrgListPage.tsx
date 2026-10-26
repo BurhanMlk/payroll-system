@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
+import { isValidCnic, isValidMobile } from "@/lib/validation";
 import { Plus, Trash2, Pencil, Check, X } from "lucide-react";
 import { Pagination } from "./EmployeesPage";
 
@@ -83,6 +84,25 @@ export default function OrgListPage({ kind }: { kind: "departments" | "designati
     updateMutation.mutate({ id, name: editName.trim() });
   };
 
+  const addBranch = () => {
+    if (!branchForm.name.trim()) return;
+    if (branchForm.headCnic && !isValidCnic(branchForm.headCnic)) {
+      toast({ title: "Invalid CNIC", description: "CNIC must be 13 digits (e.g. 12345-1234567-1).", variant: "destructive" });
+      return;
+    }
+    if (branchForm.phone && !isValidMobile(branchForm.phone)) {
+      toast({ title: "Invalid mobile", description: "Enter a valid mobile number (10-15 digits).", variant: "destructive" });
+      return;
+    }
+    createMutation.mutate({
+      name: branchForm.name.trim(),
+      headName: branchForm.headName,
+      headCnic: branchForm.headCnic,
+      phone: branchForm.phone,
+      address: branchForm.address,
+    });
+  };
+
   return (
     <div>
       <PageHeader title={config.title} description={`Manage ${config.title.toLowerCase()} for your institution`} />
@@ -99,7 +119,7 @@ export default function OrgListPage({ kind }: { kind: "departments" | "designati
           </div>
           <div className="mt-3 flex gap-2">
             <Input placeholder="Search branches…" className="max-w-sm" value={search} onChange={(e) => setSearch(e.target.value)} />
-            <Button size="sm" onClick={() => branchForm.name.trim() && createMutation.mutate({ name: branchForm.name.trim(), headName: branchForm.headName, headCnic: branchForm.headCnic, phone: branchForm.phone, address: branchForm.address })} disabled={!branchForm.name.trim()}>
+            <Button size="sm" onClick={addBranch} disabled={!branchForm.name.trim()}>
               <Plus className="h-4 w-4" /> Add Branch
             </Button>
           </div>

@@ -1,6 +1,13 @@
 import { NextFunction, Request, Response } from "express";
-import { employeeLogin, employeeSelect, getEmployeeSelf } from "./employeePortal.service";
-import { ok } from "../../lib/response";
+import {
+  employeeLogin,
+  employeeSelect,
+  getEmployeeSelf,
+  getEmployeeAttendance,
+  getEmployeeLeaveTypes,
+  submitEmployeeLeaveRequest,
+} from "./employeePortal.service";
+import { ok, created } from "../../lib/response";
 import { prisma } from "../../lib/prisma";
 import { getPayslip } from "../payroll/payroll.service";
 import { buildPayslipPdf } from "../../utils/payslipPdf";
@@ -26,6 +33,42 @@ export async function select(req: Request, res: Response, next: NextFunction) {
 export async function me(req: Request, res: Response, next: NextFunction) {
   try {
     ok(res, await getEmployeeSelf(req.employee!.id, req.employee!.tenantId));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function attendance(req: Request, res: Response, next: NextFunction) {
+  try {
+    const month = req.query.month ? String(req.query.month) : undefined;
+    ok(res, await getEmployeeAttendance(req.employee!.id, req.employee!.tenantId, month));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function leaveTypes(req: Request, res: Response, next: NextFunction) {
+  try {
+    ok(res, await getEmployeeLeaveTypes(req.employee!.tenantId));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function submitLeave(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { leaveTypeId, startDate, endDate, reason } = req.body as {
+      leaveTypeId: string;
+      startDate: string;
+      endDate: string;
+      reason?: string;
+    };
+    created(res, await submitEmployeeLeaveRequest(req.employee!.tenantId, req.employee!.id, {
+      leaveTypeId,
+      startDate,
+      endDate,
+      reason,
+    }));
   } catch (err) {
     next(err);
   }

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useToast } from "@/components/ui/toast";
-import { CalendarCheck, UserCheck, Users, Upload, Save } from "lucide-react";
+import { CalendarCheck, UserCheck, Users, Upload, Save, Search } from "lucide-react";
 
 const STATUSES = [
   { label: "Present", value: "PRESENT" },
@@ -38,6 +38,7 @@ export default function MarkAttendancePage() {
   const [bulkSource, setBulkSource] = useState("MANUAL");
   const [status, setStatus] = useState("PRESENT");
   const [employeeId, setEmployeeId] = useState("");
+  const [employeeSearch, setEmployeeSearch] = useState("");
   const [lateMinutes, setLateMinutes] = useState("");
   const [overtimeHours, setOvertimeHours] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -113,18 +114,39 @@ export default function MarkAttendancePage() {
       return api.post("/attendance/import", fd, { headers: { "Content-Type": "multipart/form-data" } });
     },
     onSuccess: (res) => {
-      const d = res.data.data as { imported: number; payslipsGenerated?: number };
+      const d = res.data.data as { imported: number; failed?: { employeeNumber: string; reason: string }[]; payslipsGenerated?: number };
       setFile(null);
       qc.invalidateQueries({ queryKey: ["attendance"] });
+      qc.invalidateQueries({ queryKey: ["attendance-summary"] });
       qc.invalidateQueries({ queryKey: ["payslips"] });
+      const failedCount = d.failed?.length ?? 0;
+      if (d.imported === 0 && failedCount > 0) {
+        toast({
+          title: "Import failed",
+          description: d.failed?.[0]?.reason ?? "No records imported.",
+          variant: "destructive",
+        });
+        return;
+      }
       toast({
         title: `Imported ${d.imported} record(s)`,
-        description: `Payslips auto-generated: ${d.payslipsGenerated ?? 0}`,
+        description:
+          failedCount > 0
+            ? `${failedCount} row(s) failed (e.g. ${d.failed?.[0]?.reason}). Payslips: ${d.payslipsGenerated ?? 0}`
+            : `Payslips auto-generated: ${d.payslipsGenerated ?? 0}`,
         variant: "success",
       });
     },
     onError: (err) => toast({ title: "Import failed", description: errorMessage(err), variant: "destructive" }),
   });
+
+  const employeeOptions = employees ?? [];
+  const selectedEmployee = employeeOptions.find((e) => e.id === employeeId);
+  const filteredEmployees = employeeSearch.trim()
+    ? employeeOptions.filter((e) =>
+        `${e.firstName} ${e.lastName} ${e.employeeNumber}`.toLowerCase().includes(employeeSearch.trim().toLowerCase()),
+      )
+    : employeeOptions;
 
   return (
     <div>
@@ -153,12 +175,45 @@ export default function MarkAttendancePage() {
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label>Employee</Label>
-              <Select
-                value={employeeId}
-                onChange={(e) => setEmployeeId(e.target.value)}
-                options={(employees ?? []).map((e) => ({ label: `${e.firstName} ${e.lastName} (${e.employeeNumber})`, value: e.id }))}
-                placeholder="Select employee"
-              />
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  placeholder="Search by employee ID or name"
+                  value={employeeSearch}
+                  onChange={(e) => {
+                    setEmployeeSearch(e.target.value);
+                    setEmployeeId("");
+                  }}
+                />
+              </div>
+              {employeeSearch.trim() && (
+                <div className="max-h-48 overflow-y-auto rounded-md border bg-white">
+                  {filteredEmployees.length === 0 ? (
+                    <p className="px-3 py-2 text-sm text-muted-foreground">No employee found</p>
+                  ) : (
+                    filteredEmployees.slice(0, 20).map((e) => (
+                      <button
+                        key={e.id}
+                        type="button"
+                        onClick={() => {
+                          setEmployeeId(e.id);
+                          setEmployeeSearch(`${e.firstName} ${e.lastName} (${e.employeeNumber})`);
+                        }}
+                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-accent"
+                      >
+                        <span>{e.firstName} {e.lastName}</span>
+                        <span className="text-xs text-muted-foreground">{e.employeeNumber}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+              {selectedEmployee && (
+                <p className="text-xs text-emerald-600">
+                  Selected: {selectedEmployee.firstName} {selectedEmployee.lastName} ({selectedEmployee.employeeNumber})
+                </p>
+              )}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -228,7 +283,8 @@ export default function MarkAttendancePage() {
             <h2 className="font-semibold">Upload CSV / Excel Sheet</h2>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Columns: Employee Number (or CNIC), Date, Status. Import ke baad payslips khud generate ho jayenge.
+            Columns: Employee Number (or CNIC), Date, Status. "Leave"/"L" status ya numeric "Leaves" column
+            par salary deduction per leave day apply hoti hai. Import ke baad payslips khud generate ho jayenge.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <input type="file" accept=".csv,.xlsx,.xls" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />

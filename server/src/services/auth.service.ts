@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { randomUUID } from "node:crypto";
-import { User } from "@prisma/client";
+import { Prisma, User } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { redis } from "../lib/redis";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../lib/jwt";
@@ -27,27 +27,27 @@ export interface SafeUser {
   tenant?: { id: string; name: string; slug: string; status: string; currency: string } | null;
 }
 
-async function buildSafeUser(user: User): Promise<SafeUser> {
-  const withRoles = await prisma.user.findUnique({
-    where: { id: user.id },
-    include: {
-      roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
-      tenant: true,
-    },
-  });
-  const roles = withRoles?.roles.map((ur) => ur.role.key) ?? [];
+const safeUserInclude = {
+  roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
+  tenant: true,
+} satisfies Prisma.UserInclude;
+
+type LoadedUser = Prisma.UserGetPayload<{ include: typeof safeUserInclude }>;
+
+function buildSafeUserFromLoaded(withRoles: LoadedUser): SafeUser {
+  const roles = withRoles.roles.map((ur) => ur.role.key);
   const permissions = Array.from(
-    new Set(withRoles?.roles.flatMap((ur) => ur.role.permissions.map((rp) => rp.permission.key)) ?? []),
+    new Set(withRoles.roles.flatMap((ur) => ur.role.permissions.map((rp) => rp.permission.key))),
   );
   return {
-    id: user.id,
-    email: user.email,
-    fullName: user.fullName,
-    tenantId: user.tenantId,
-    scope: user.tenantId ? "TENANT" : "PLATFORM",
+    id: withRoles.id,
+    email: withRoles.email,
+    fullName: withRoles.fullName,
+    tenantId: withRoles.tenantId,
+    scope: withRoles.tenantId ? "TENANT" : "PLATFORM",
     roles,
     permissions,
-    tenant: withRoles?.tenant
+    tenant: withRoles.tenant
       ? {
           id: withRoles.tenant.id,
           name: withRoles.tenant.name,
@@ -59,15 +59,21 @@ async function buildSafeUser(user: User): Promise<SafeUser> {
   };
 }
 
+async function loadSafeUser(userId: string): Promise<SafeUser | null> {
+  const withRoles = await prisma.user.findUnique({
+    where: { id: userId },
+    include: safeUserInclude,
+  });
+  return withRoles ? buildSafeUserFromLoaded(withRoles) : null;
+}
+
 function denyListKey(jti: string): string {
   return `refresh:denylist:${jti}`;
 }
 
 /** Fetches and builds the full safe user (with tenant currency) for /auth/me. */
 export async function getSafeUserById(userId: string): Promise<SafeUser | null> {
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) return null;
-  return buildSafeUser(user);
+  return loadSafeUser(userId);
 }
 
 export async function login(email: string, password: string, ip?: string): Promise<AuthTokens> {
@@ -115,7 +121,16 @@ export async function login(email: string, password: string, ip?: string): Promi
 }
 
 async function issueTokens(user: User, _ip?: string): Promise<AuthTokens> {
-  const safeUser = await buildSafeUser(user);
+  const safeUser = (await loadSafeUser(user.id)) ?? {
+    id: user.id,
+    email: user.email,
+    fullName: user.fullName,
+    tenantId: user.tenantId,
+    scope: user.tenantId ? ("TENANT" as const) : ("PLATFORM" as const),
+    roles: [],
+    permissions: [],
+    tenant: null,
+  };
   const jti = randomUUID();
   const accessToken = signAccessToken({
     sub: user.id,

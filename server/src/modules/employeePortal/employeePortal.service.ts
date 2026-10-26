@@ -1,6 +1,8 @@
+import { Request } from "express";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../lib/errors";
 import { signEmployeeToken } from "../../lib/jwt";
+import { listLeaveTypes, requestLeave } from "../leave/leave.service";
 
 function formatCnic(digits: string): string {
   return `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12, 13)}`;
@@ -131,4 +133,44 @@ export async function getEmployeeSelf(employeeId: string, tenantId: string) {
   });
 
   return { ...employee, attendance };
+}
+
+/** Attendance for a single month for the logged-in employee. */
+export async function getEmployeeAttendance(employeeId: string, tenantId: string, month?: string) {
+  const [y, m] = (month ?? "").split("-").map(Number);
+  const valid = Number.isInteger(y) && Number.isInteger(m) && m >= 1 && m <= 12;
+  const now = new Date();
+  const year = valid ? y : now.getFullYear();
+  const monthIndex = valid ? m - 1 : now.getMonth();
+  const start = new Date(year, monthIndex, 1);
+  const end = new Date(year, monthIndex + 1, 0, 23, 59, 59);
+
+  return prisma.attendance.findMany({
+    where: { tenantId, employeeId, date: { gte: start, lte: end } },
+    orderBy: { date: "asc" },
+  });
+}
+
+/** Leave types available to the logged-in employee. */
+export async function getEmployeeLeaveTypes(tenantId: string) {
+  return listLeaveTypes(tenantId);
+}
+
+/** Creates a leave request on behalf of the logged-in employee. */
+export async function submitEmployeeLeaveRequest(
+  tenantId: string,
+  employeeId: string,
+  input: { leaveTypeId: string; startDate: string; endDate: string; reason?: string },
+) {
+  return requestLeave(
+    tenantId,
+    employeeId,
+    {
+      leaveTypeId: input.leaveTypeId,
+      startDate: new Date(input.startDate),
+      endDate: new Date(input.endDate),
+      reason: input.reason,
+    },
+    { tenant: { id: tenantId }, ip: "employee-portal", headers: {} } as Request,
+  );
 }

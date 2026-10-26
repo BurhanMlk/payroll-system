@@ -9,7 +9,7 @@ export default function Logo({
 }: LogoProps) {
   return (
     <img
-      src="/branding/edupayroll-logo.png"
+      src="/branding/logo.png"
       alt={alt}
       className={`bg-white ${className}`}
       draggable={false}
