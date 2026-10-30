@@ -7,12 +7,12 @@ export interface SelectOption {
 }
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
-  options: SelectOption[];
+  options?: SelectOption[];
   placeholder?: string;
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className, options, placeholder, ...props }, ref) => (
+  ({ className, options, placeholder, children, ...props }, ref) => (
     <select
       ref={ref}
       className={cn(
@@ -21,12 +21,18 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
       )}
       {...props}
     >
-      {placeholder && <option value="">{placeholder}</option>}
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
+      {children ? (
+        children
+      ) : (
+        <>
+          {placeholder && <option value="">{placeholder}</option>}
+          {options?.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </>
+      )}
     </select>
   ),
 );

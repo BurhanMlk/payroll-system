@@ -19,6 +19,8 @@ import {
   CalendarCheck,
   Wallet,
   Search,
+  GraduationCap,
+  AlertCircle,
 } from "lucide-react";
 import { cn, initials } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -87,6 +89,16 @@ const tenantNav: NavSection[] = [
   },
 ];
 
+const studentNavSection: NavSection = {
+  label: "Students",
+  items: [
+    { label: "Students", to: "/app/students", icon: <GraduationCap className="h-4 w-4" /> },
+    { label: "Student Attendance", to: "/app/students/attendance", icon: <CalendarCheck className="h-4 w-4" /> },
+    { label: "Student Fees", to: "/app/students/fees", icon: <CreditCard className="h-4 w-4" /> },
+    { label: "Fees Due (Pending)", to: "/app/students/fees-due", icon: <AlertCircle className="h-4 w-4" /> },
+  ],
+};
+
 const platformNav: NavSection[] = [
   { items: [{ label: "Dashboard", to: "/platform", icon: <LayoutDashboard className="h-4 w-4" /> }] },
   { items: [{ label: "Institutions", to: "/platform/institutions", icon: <School className="h-4 w-4" /> }] },
@@ -139,7 +151,18 @@ export function AppLayout() {
   const { user, logout, isPlatform } = useAuth();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  const nav = isPlatform ? platformNav : tenantNav;
+
+  const isEducational =
+    !user?.tenant?.institutionType ||
+    ["COLLEGE", "SCHOOL", "UNIVERSITY", "ACADEMY"].includes(user.tenant.institutionType.toUpperCase());
+
+  const nav = isPlatform
+    ? platformNav
+    : [
+        tenantNav[0], // Overview
+        ...(isEducational ? [studentNavSection] : []),
+        ...tenantNav.slice(1),
+      ];
 
   const handleLogout = async () => {
     await logout();

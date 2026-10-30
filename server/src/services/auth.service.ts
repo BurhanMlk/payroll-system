@@ -24,7 +24,7 @@ export interface SafeUser {
   scope: "PLATFORM" | "TENANT";
   roles: string[];
   permissions: string[];
-  tenant?: { id: string; name: string; slug: string; status: string; currency: string } | null;
+  tenant?: { id: string; name: string; slug: string; status: string; currency: string; institutionType?: string } | null;
 }
 
 const safeUserInclude = {
@@ -54,6 +54,7 @@ function buildSafeUserFromLoaded(withRoles: LoadedUser): SafeUser {
           slug: withRoles.tenant.slug,
           status: withRoles.tenant.status,
           currency: withRoles.tenant.currency,
+          institutionType: withRoles.tenant.institutionType,
         }
       : null,
   };

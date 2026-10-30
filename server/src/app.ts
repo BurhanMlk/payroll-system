@@ -19,10 +19,12 @@ import { resolveTenant } from "./middlewares/resolveTenant";
 import authRoutes from "./routes/auth.routes";
 
 import employeePortalRoutes from "./modules/employeePortal/employeePortal.routes";
+import studentPortalRoutes from "./modules/studentPortal/studentPortal.routes";
 
 import onboardingRoutes from "./modules/onboarding/onboarding.routes";
 import { orgRouter } from "./modules/org/org.routes";
 import employeesRoutes from "./modules/employees/employees.routes";
+import studentsRoutes from "./modules/students/students.routes";
 import attendanceRoutes from "./modules/attendance/attendance.routes";
 import biometricRoutes from "./modules/biometric/biometric.routes";
 import shiftsRoutes from "./modules/shifts/shifts.routes";
@@ -163,6 +165,11 @@ export function createApp(): Express {
     employeePortalRoutes,
   );
 
+  app.use(
+    "/api/v1/student-portal",
+    studentPortalRoutes,
+  );
+
   // --------------------------------------------------------------------------
   // TENANT-SCOPED ROUTES
   // --------------------------------------------------------------------------
@@ -184,6 +191,11 @@ export function createApp(): Express {
   tenantRouter.use(
     "/employees",
     employeesRoutes,
+  );
+
+  tenantRouter.use(
+    "/students",
+    studentsRoutes,
   );
 
   tenantRouter.use(

@@ -1,4 +1,5 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, EmploymentType } from "@prisma/client";
+import ExcelJS from "exceljs";
 import { prisma } from "../../lib/prisma";
 import { AppError } from "../../lib/errors";
 import { parsePagination, paginationMeta } from "../../lib/response";
@@ -339,4 +340,261 @@ function pick<T extends object, K extends keyof T>(obj: T, keys: K[]): Partial<T
   const result: Partial<T> = {};
   for (const k of keys) result[k] = obj[k];
   return result;
+}
+
+export async function generateEmployeeTemplate(): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Employees Template");
+  sheet.columns = [
+    { header: "First Name", key: "firstName", width: 16 },
+    { header: "Last Name", key: "lastName", width: 16 },
+    { header: "Father Name", key: "fatherName", width: 20 },
+    { header: "CNIC", key: "nationalId", width: 18 },
+    { header: "Email", key: "email", width: 25 },
+    { header: "Phone", key: "phone", width: 18 },
+    { header: "Department", key: "department", width: 18 },
+    { header: "Designation", key: "designation", width: 18 },
+    { header: "Employment Type", key: "employmentType", width: 18 },
+    { header: "Basic Salary", key: "basicSalary", width: 15 },
+    { header: "Joining Date", key: "joiningDate", width: 15 },
+    { header: "Gender", key: "gender", width: 12 },
+    { header: "Date of Birth", key: "dateOfBirth", width: 15 },
+    { header: "Address", key: "address", width: 30 },
+  ];
+  sheet.getRow(1).font = { bold: true };
+  sheet.addRow({
+    firstName: "Ahmed",
+    lastName: "Raza",
+    fatherName: "Tariq Mahmood",
+    nationalId: "35201-1234567-1",
+    email: "ahmed.raza@example.com",
+    phone: "0300-1234567",
+    department: "Academics",
+    designation: "Lecturer",
+    employmentType: "FULL_TIME",
+    basicSalary: 60000,
+    joiningDate: "2026-01-15",
+    gender: "MALE",
+    dateOfBirth: "1992-05-12",
+    address: "Gulberg III, Lahore",
+  });
+  sheet.addRow({
+    firstName: "Fatima",
+    lastName: "Noor",
+    fatherName: "Muhammad Aslam",
+    nationalId: "35202-7654321-2",
+    email: "fatima.noor@example.com",
+    phone: "0321-7654321",
+    department: "Administration",
+    designation: "Assistant Manager",
+    employmentType: "FULL_TIME",
+    basicSalary: 75000,
+    joiningDate: "2026-02-01",
+    gender: "FEMALE",
+    dateOfBirth: "1990-10-24",
+    address: "DHA Phase 5, Lahore",
+  });
+  return (await workbook.xlsx.writeBuffer()) as unknown as Buffer;
+}
+
+function normalizeHeaderKey(str: string): string {
+  return str.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function parseCellString(val: unknown): string {
+  if (val === null || val === undefined) return "";
+  if (typeof val === "object" && val !== null && "text" in val) {
+    return String((val as { text: string }).text).trim();
+  }
+  if (val instanceof Date) {
+    return val.toISOString().slice(0, 10);
+  }
+  return String(val).trim();
+}
+
+export async function importEmployeesFile(
+  tenantId: string,
+  file: Express.Multer.File,
+  req: Request,
+): Promise<{ imported: number; failed: { row: number; name?: string; reason: string }[] }> {
+  let rows: string[][] = [];
+  const fileName = file.originalname.toLowerCase();
+
+  if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls")) {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(file.buffer as never);
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) throw AppError.badRequest("Uploaded workbook has no worksheets.");
+    worksheet.eachRow((row) => {
+      const values: string[] = [];
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        values[colNumber - 1] = parseCellString(cell.value);
+      });
+      rows.push(values);
+    });
+  } else {
+    // Parse CSV
+    const text = file.buffer.toString("utf-8").replace(/^\uFEFF/, "");
+    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    rows = lines.map((line) => {
+      // Basic comma/semicolon/tab delimiter splitting
+      const delimiter = line.includes(";") ? ";" : line.includes("\t") ? "\t" : ",";
+      return line.split(delimiter).map((c) => c.replace(/^["']|["']$/g, "").trim());
+    });
+  }
+
+  if (rows.length < 2) {
+    throw AppError.badRequest("File must contain a header row and at least one data row.");
+  }
+
+  const rawHeaders = rows[0];
+  const headers = rawHeaders.map(normalizeHeaderKey);
+  const col = (candidates: string[]) => headers.findIndex((h) => candidates.includes(h));
+
+  const firstNameCol = col(["firstname", "first", "fname", "name"]);
+  const lastNameCol = col(["lastname", "last", "lname", "surname"]);
+  const fatherNameCol = col(["fathername", "father", "guardian"]);
+  const nationalIdCol = col(["cnic", "nationalid", "bform", "nic", "identity"]);
+  const emailCol = col(["email", "emailaddress"]);
+  const phoneCol = col(["phone", "phonenumber", "mobile", "contact"]);
+  const deptCol = col(["department", "dept"]);
+  const desigCol = col(["designation", "title", "role"]);
+  const typeCol = col(["employmenttype", "type"]);
+  const salaryCol = col(["basicsalary", "salary", "grosssalary", "pay"]);
+  const joinCol = col(["joiningdate", "doj", "joined"]);
+  const genderCol = col(["gender", "sex"]);
+  const dobCol = col(["dateofbirth", "dob", "birthdate"]);
+  const addressCol = col(["address", "residence"]);
+
+  const failed: { row: number; name?: string; reason: string }[] = [];
+  let imported = 0;
+
+  // Plan limit check
+  const subscription = await prisma.subscription.findUnique({
+    where: { tenantId },
+    include: { plan: true },
+  });
+
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r || r.length === 0 || r.every((c) => !c)) continue;
+
+    const rowNumber = i + 1;
+    let firstName = firstNameCol >= 0 ? r[firstNameCol] ?? "" : "";
+    let lastName = lastNameCol >= 0 ? r[lastNameCol] ?? "" : "";
+
+    // If only one Name column was present and has spaces, split into first/last
+    if (firstName && !lastName && firstNameCol >= 0 && lastNameCol < 0) {
+      const parts = firstName.split(/\s+/);
+      firstName = parts[0];
+      lastName = parts.slice(1).join(" ") || parts[0];
+    }
+
+    if (!firstName) {
+      failed.push({ row: rowNumber, reason: "First name is required." });
+      continue;
+    }
+    if (!lastName) lastName = firstName;
+
+    const rawSalary = salaryCol >= 0 ? r[salaryCol]?.replace(/[^0-9.]/g, "") : "0";
+    const basicSalary = parseFloat(rawSalary || "0") || 0;
+
+    const fatherName = fatherNameCol >= 0 ? r[fatherNameCol] : null;
+    const nationalId = nationalIdCol >= 0 ? r[nationalIdCol] : null;
+    const email = emailCol >= 0 ? r[emailCol] : null;
+    const phone = phoneCol >= 0 ? r[phoneCol] : null;
+    const deptName = deptCol >= 0 ? r[deptCol] : undefined;
+    const desigName = desigCol >= 0 ? r[desigCol] : undefined;
+    const rawType = typeCol >= 0 ? (r[typeCol] ?? "").toUpperCase().replace(/[\s-]/g, "_") : "FULL_TIME";
+    const employmentType: EmploymentType = (["FULL_TIME", "PART_TIME", "CONTRACT", "VISITING", "INTERN", "PROBATION"].includes(rawType)
+      ? rawType
+      : "FULL_TIME") as EmploymentType;
+    const rawGender = genderCol >= 0 ? (r[genderCol] ?? "").toUpperCase() : null;
+    const gender = ["MALE", "FEMALE", "OTHER"].includes(rawGender ?? "") ? (rawGender as never) : null;
+    const address = addressCol >= 0 ? r[addressCol] : null;
+
+    let joiningDate: Date | null = null;
+    if (joinCol >= 0 && r[joinCol]) {
+      const d = new Date(r[joinCol]);
+      if (!Number.isNaN(d.getTime())) joiningDate = d;
+    }
+
+    let dateOfBirth: Date | null = null;
+    if (dobCol >= 0 && r[dobCol]) {
+      const d = new Date(r[dobCol]);
+      if (!Number.isNaN(d.getTime())) dateOfBirth = d;
+    }
+
+    // Check duplicate nationalId if provided
+    if (nationalId) {
+      const existing = await prisma.employee.findFirst({
+        where: { tenantId, nationalId: { equals: nationalId.trim(), mode: "insensitive" } },
+      });
+      if (existing) {
+        failed.push({ row: rowNumber, name: `${firstName} ${lastName}`, reason: `CNIC ${nationalId} already exists.` });
+        continue;
+      }
+    }
+
+    // Check plan limits
+    if (subscription) {
+      const count = await prisma.employee.count({ where: { tenantId, status: "ACTIVE" } });
+      if (count >= subscription.plan.employeeLimit) {
+        failed.push({
+          row: rowNumber,
+          name: `${firstName} ${lastName}`,
+          reason: `Plan limit of ${subscription.plan.employeeLimit} employees reached.`,
+        });
+        break;
+      }
+    }
+
+    try {
+      const departmentId = deptName ? await resolveDepartment(tenantId, undefined, deptName) : undefined;
+      const designationId = desigName ? await resolveDesignation(tenantId, undefined, desigName) : undefined;
+      const employeeNumber = await generateEmployeeNumber(tenantId);
+
+      await prisma.employee.create({
+        data: {
+          tenantId,
+          employeeNumber,
+          firstName,
+          lastName,
+          fatherName: fatherName || null,
+          nationalId: nationalId || null,
+          email: email || null,
+          phone: phone || null,
+          departmentId,
+          designationId,
+          employmentType,
+          basicSalary: new Prisma.Decimal(basicSalary),
+          joiningDate: joiningDate || new Date(),
+          gender,
+          dateOfBirth,
+          address: address || null,
+          status: "ACTIVE",
+          salaryType: "FIXED",
+          paymentMethod: "BANK_TRANSFER",
+        },
+      });
+      imported++;
+    } catch (err: unknown) {
+      failed.push({
+        row: rowNumber,
+        name: `${firstName} ${lastName}`,
+        reason: err instanceof Error ? err.message : "Failed to insert employee.",
+      });
+    }
+  }
+
+  await recordAudit({
+    req,
+    action: "employee.bulk_import",
+    module: "employee",
+    recordId: tenantId,
+    recordType: "Tenant",
+    next: { imported, failedCount: failed.length },
+  });
+
+  return { imported, failed };
 }

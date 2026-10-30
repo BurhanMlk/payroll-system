@@ -6,7 +6,7 @@ export interface User {
   scope: "PLATFORM" | "TENANT";
   roles: string[];
   permissions: string[];
-  tenant?: { id: string; name: string; slug: string; status: string; currency: string } | null;
+  tenant?: { id: string; name: string; slug: string; status: string; currency: string; institutionType?: string } | null;
 }
 
 export interface PaginationMeta {
@@ -80,4 +80,55 @@ export interface Subscription {
     userLimit: number;
     features: { key: string; label: string; enabled: boolean }[];
   };
+}
+
+export interface Student {
+  id: string;
+  rollNumber: string;
+  fullName: string;
+  fatherName: string;
+  nationalId: string;
+  className: string;
+  section?: string | null;
+  gender?: string | null;
+  dateOfBirth?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  branchId?: string | null;
+  branch?: { id: string; name: string } | null;
+  monthlyFee: string | number;
+  status: string;
+  createdAt: string;
+}
+
+export interface StudentAttendance {
+  id: string;
+  studentId: string;
+  student?: Student;
+  date: string;
+  status: "PRESENT" | "ABSENT" | "LATE" | "HALF_DAY" | "LEAVE";
+  remarks?: string | null;
+}
+
+export interface StudentFee {
+  id: string;
+  studentId: string;
+  student: Student;
+  month: string;
+  feeAmount: string | number;
+  paidAmount: string | number;
+  dueAmount: string | number;
+  status: "PENDING" | "PAID" | "PARTIAL";
+  paymentMethod?: string | null;
+  paidAt?: string | null;
+  receiptNumber?: string | null;
+  notes?: string | null;
+}
+
+export interface StudentFeeSummary {
+  totalStudents: number;
+  totalExpectedFee: number;
+  totalCollectedFee: number;
+  totalPendingDues: number;
 }

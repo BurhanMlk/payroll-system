@@ -130,6 +130,20 @@ export const PERMISSIONS: PermissionDef[] = [
 
   { key: "billing.manage", module: "billing", action: "manage", description: "Manage billing & subscription" },
 
+  // Students
+
+  { key: "student.create", module: "student", action: "create", description: "Create students" },
+
+  { key: "student.read", module: "student", action: "read", description: "View students" },
+
+  { key: "student.update", module: "student", action: "update", description: "Edit students" },
+
+  { key: "student.delete", module: "student", action: "delete", description: "Delete students" },
+
+  { key: "student.attendance", module: "student", action: "attendance", description: "Manage student attendance" },
+
+  { key: "student.fee", module: "student", action: "fee", description: "Manage student fees" },
+
 ];
 
 

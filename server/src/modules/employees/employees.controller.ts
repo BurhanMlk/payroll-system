@@ -9,7 +9,10 @@ import {
   getEmployeeSalaryHistory,
   listEmployeeDocuments,
   getEmployeePortal,
+  generateEmployeeTemplate,
+  importEmployeesFile,
 } from "./employees.service";
+import { AppError } from "../../lib/errors";
 import { storeFile } from "../../services/storage.service";
 import { prisma } from "../../lib/prisma";
 import { recordAudit } from "../../services/audit.service";
@@ -136,6 +139,29 @@ export async function deleteDocument(req: Request, res: Response, next: NextFunc
     }
     await prisma.employeeDocument.delete({ where: { id: doc.id } });
     noContent(res);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function downloadTemplate(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const buffer = await generateEmployeeTemplate();
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", 'attachment; filename="employee_import_template.xlsx"');
+    res.send(buffer);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function bulkImport(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.file) {
+      throw AppError.badRequest("Please upload an Excel (.xlsx) or CSV file.");
+    }
+    const result = await importEmployeesFile(req.tenant!.id, req.file, req);
+    ok(res, result);
   } catch (err) {
     next(err);
   }

@@ -53,3 +53,21 @@ export function signEmployeeToken(payload: Omit<EmployeeTokenPayload, keyof JwtP
 export function verifyEmployeeToken(token: string): EmployeeTokenPayload {
   return jwt.verify(token, env.JWT_ACCESS_SECRET) as EmployeeTokenPayload;
 }
+
+export interface StudentTokenPayload extends JwtPayload {
+  sub: string; // student id
+  tenantId: string;
+  rollNumber: string;
+  fullName: string;
+  scope: "STUDENT";
+}
+
+export function signStudentToken(payload: Omit<StudentTokenPayload, keyof JwtPayload>): string {
+  return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
+    expiresIn: env.JWT_ACCESS_EXPIRES_IN,
+  } as SignOptions);
+}
+
+export function verifyStudentToken(token: string): StudentTokenPayload {
+  return jwt.verify(token, env.JWT_ACCESS_SECRET) as StudentTokenPayload;
+}

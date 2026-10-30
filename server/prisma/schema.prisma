@@ -276,6 +276,10 @@ model Tenant {
   biometricMappings BiometricEmployeeMap[]
   biometricPunches  BiometricPunch[]
 
+  students           Student[]
+  studentAttendances StudentAttendance[]
+  studentFees        StudentFee[]
+
   @@index([status])
   @@index([createdAt])
 }
@@ -348,6 +352,7 @@ model Branch {
   employees        Employee[]
   holidays         Holiday[]
   biometricDevices BiometricDevice[]
+  students         Student[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -1334,4 +1339,80 @@ model GlobalSetting {
   value     Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ============================================================================
+// STUDENT MANAGEMENT
+// ============================================================================
+
+model Student {
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rollNumber  String
+  fullName    String
+  fatherName  String
+  nationalId  String    // B-Form or CNIC
+  className   String    // Nursery, KG, Class 1-12, BS, MS, PhD, etc.
+  section     String?   // A, B, C, D (for classes <= 12)
+  gender      Gender?
+  dateOfBirth DateTime?
+  phone       String?
+  email       String?
+  address     String?
+  branchId    String?
+  branch      Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  monthlyFee  Decimal   @default(0)
+  status      String    @default("ACTIVE") // ACTIVE, INACTIVE, ALUMNI
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  attendances StudentAttendance[]
+  fees        StudentFee[]
+
+  @@unique([tenantId, rollNumber])
+  @@index([tenantId, className, section])
+  @@index([tenantId, nationalId])
+  @@index([tenantId, status])
+}
+
+model StudentAttendance {
+  id        String           @id @default(cuid())
+  tenantId  String
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date      DateTime
+  status    AttendanceStatus @default(PRESENT)
+  remarks   String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([tenantId, studentId, date])
+  @@index([tenantId, date])
+  @@index([tenantId, studentId])
+}
+
+model StudentFee {
+  id            String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  studentId     String
+  student       Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  month         String    // e.g. "2026-10"
+  feeAmount     Decimal
+  paidAmount    Decimal   @default(0)
+  dueAmount     Decimal   @default(0)
+  status        String    @default("PENDING") // PENDING, PAID, PARTIAL
+  paymentMethod String?   // CASH, BANK, ONLINE, CHEQUE
+  paidAt        DateTime?
+  receiptNumber String?
+  notes         String?
+  recordedBy    String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([tenantId, studentId, month])
+  @@index([tenantId, month, status])
+  @@index([tenantId, studentId])
 }

@@ -9,8 +9,14 @@ import RegisterPage from "./pages/auth/RegisterPage";
 import LandingPage from "./pages/LandingPage";
 import EmployeePortalLoginPage from "./pages/employee/EmployeePortalLoginPage";
 import EmployeePortalDashboard from "./pages/employee/EmployeePortalDashboard";
+import StudentPortalLoginPage from "./pages/student/StudentPortalLoginPage";
+import StudentPortalDashboard from "./pages/student/StudentPortalDashboard";
 import DashboardPage from "./pages/tenant/DashboardPage";
 import EmployeesPage from "./pages/tenant/EmployeesPage";
+import StudentsPage from "./pages/tenant/StudentsPage";
+import StudentAttendancePage from "./pages/tenant/StudentAttendancePage";
+import StudentFeesPage from "./pages/tenant/StudentFeesPage";
+import StudentFeesDuePage from "./pages/tenant/StudentFeesDuePage";
 import EmployeeLookupPage from "./pages/tenant/EmployeeLookupPage";
 import OrgListPage from "./pages/tenant/OrgListPage";
 import AttendancePage from "./pages/tenant/AttendancePage";
@@ -75,6 +81,8 @@ export default function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/employee" element={<EmployeePortalLoginPage />} />
       <Route path="/employee/portal" element={<EmployeePortalDashboard />} />
+      <Route path="/student" element={<StudentPortalLoginPage />} />
+      <Route path="/student/portal" element={<StudentPortalDashboard />} />
 
       <Route
         path="/app"
@@ -87,6 +95,10 @@ export default function App() {
         }
       >
         <Route index element={<DashboardPage />} />
+        <Route path="students" element={<StudentsPage />} />
+        <Route path="students/attendance" element={<StudentAttendancePage />} />
+        <Route path="students/fees" element={<StudentFeesPage />} />
+        <Route path="students/fees-due" element={<StudentFeesDuePage />} />
         <Route path="employees" element={<EmployeesPage />} />
         <Route path="employee-lookup" element={<EmployeeLookupPage />} />
         <Route path="departments" element={<OrgListPage kind="departments" />} />

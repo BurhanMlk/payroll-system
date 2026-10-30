@@ -127,6 +127,9 @@ export default function LandingPage() {
             <Button asChild variant="ghost">
               <Link to="/employee">Employee Login</Link>
             </Button>
+            <Button asChild variant="ghost">
+              <Link to="/student">Student Login</Link>
+            </Button>
             {user ? (
               <Button asChild variant="outline">
                 <Link to={dashboardLink}>Go to Dashboard</Link>
@@ -153,6 +156,7 @@ export default function LandingPage() {
               <a href="#how" onClick={() => setMenuOpen(false)} className="text-sm font-medium text-slate-700">How it works</a>
               <a href="#pricing" onClick={() => setMenuOpen(false)} className="text-sm font-medium text-slate-700">Pricing</a>
               <Link to="/employee" onClick={() => setMenuOpen(false)} className="text-sm font-medium text-slate-700">Employee Login</Link>
+              <Link to="/student" onClick={() => setMenuOpen(false)} className="text-sm font-medium text-slate-700">Student Login</Link>
               <div className="flex gap-3 pt-2">
                 {user ? (
                   <Button asChild variant="outline" className="flex-1">

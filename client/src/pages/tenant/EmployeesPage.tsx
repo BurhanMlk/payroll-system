@@ -15,7 +15,7 @@ import { formatCurrency } from "@/lib/utils";
 import type { Employee, PaginationMeta } from "@/lib/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatCnic, formatPhoneNumber, isValidCnic, isValidPhoneNumber } from "@/lib/validation";
-import { Search, Plus, Users, X, Pencil, Trash2 } from "lucide-react";
+import { Search, Plus, Users, X, Pencil, Trash2, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface EmployeeResponse {
   items: Employee[];
@@ -44,6 +44,7 @@ export default function EmployeesPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [addOpen, setAddOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [editing, setEditing] = useState<Employee | null>(null);
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -67,15 +68,39 @@ export default function EmployeesPage() {
     onError: (err) => toast({ title: "Failed", description: errorMessage(err), variant: "destructive" }),
   });
 
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await api.get("/employees/template", { responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", "employee_import_template.xlsx");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      toast({ title: "Failed to download template", description: errorMessage(err), variant: "destructive" });
+    }
+  };
+
   return (
     <div>
       <PageHeader
         title="Employees"
         description="Manage your institution's workforce"
         actions={
-          <Button size="sm" onClick={() => setAddOpen(true)}>
-            <Plus className="h-4 w-4" /> Add Employee
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
+              <Download className="h-4 w-4" /> Download Template
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setBulkOpen(true)}>
+              <Upload className="h-4 w-4" /> Bulk Import
+            </Button>
+            <Button size="sm" onClick={() => setAddOpen(true)}>
+              <Plus className="h-4 w-4" /> Add Employee
+            </Button>
+          </div>
         }
       />
 
@@ -156,6 +181,12 @@ export default function EmployeesPage() {
         editing={editing}
         onClose={() => { setAddOpen(false); setEditing(null); }}
         onCreated={() => qc.invalidateQueries({ queryKey: ["employees"] })}
+      />
+
+      <BulkImportEmployeesDialog
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        onSuccess={() => qc.invalidateQueries({ queryKey: ["employees"] })}
       />
     </div>
   );
@@ -569,6 +600,128 @@ function EmptyState() {
       <Users className="mb-3 h-10 w-10 text-muted-foreground/50" />
       <p className="font-medium">No employees found</p>
       <p className="text-sm text-muted-foreground">Add your first employee to get started.</p>
+    </div>
+  );
+}
+
+function BulkImportEmployeesDialog({
+  open,
+  onClose,
+  onSuccess,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<{ imported: number; failed: { row: number; name?: string; reason: string }[] } | null>(null);
+  const { toast } = useToast();
+
+  if (!open) return null;
+
+  const handleUpload = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!file) {
+      toast({ title: "Please select a file to upload", variant: "destructive" });
+      return;
+    }
+    setLoading(true);
+    setResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await api.post("/employees/bulk-import", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const data = res.data.data;
+      setResult(data);
+      if (data.imported > 0) {
+        toast({ title: "Import Successful", description: `Imported ${data.imported} employees.`, variant: "success" });
+        onSuccess();
+      } else {
+        toast({ title: "Import Completed with Issues", description: "No employees were imported.", variant: "destructive" });
+      }
+    } catch (err) {
+      toast({ title: "Import failed", description: errorMessage(err), variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const reset = () => {
+    setFile(null);
+    setResult(null);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+        <button onClick={reset} className="absolute right-4 top-4 text-slate-400 hover:text-slate-600">
+          <X className="h-5 w-5" />
+        </button>
+
+        <div className="mb-4 flex items-center gap-2">
+          <FileSpreadsheet className="h-6 w-6 text-indigo-600" />
+          <h2 className="text-lg font-bold text-slate-900">Bulk Import Employees</h2>
+        </div>
+
+        <p className="mb-4 text-xs text-slate-500">
+          Upload an Excel (.xlsx, .xls) or CSV file with employee data to import in bulk.
+        </p>
+
+        <form onSubmit={handleUpload} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Select Excel / CSV File</Label>
+            <Input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              className="text-xs"
+              required
+            />
+            {file && (
+              <p className="text-[11px] text-slate-500">
+                Selected: <span className="font-medium text-slate-700">{file.name}</span> ({(file.size / 1024).toFixed(1)} KB)
+              </p>
+            )}
+          </div>
+
+          {result && (
+            <div className="rounded-xl border p-3 space-y-2 text-xs">
+              <div className="flex items-center gap-2 text-emerald-700 font-semibold">
+                <CheckCircle2 className="h-4 w-4" />
+                <span>Successfully imported {result.imported} employees.</span>
+              </div>
+              {result.failed.length > 0 && (
+                <div className="space-y-1 pt-1">
+                  <p className="font-medium text-red-600 flex items-center gap-1">
+                    <AlertCircle className="h-3.5 w-3.5" /> {result.failed.length} record(s) failed or skipped:
+                  </p>
+                  <div className="max-h-32 overflow-y-auto space-y-1 pl-2 border-l-2 border-red-200">
+                    {result.failed.map((f, i) => (
+                      <p key={i} className="text-[11px] text-slate-600">
+                        Row {f.row}: {f.name ? `[${f.name}] ` : ""}{f.reason}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button type="button" variant="ghost" size="sm" onClick={reset}>
+              {result?.imported ? "Close" : "Cancel"}
+            </Button>
+            <Button type="submit" size="sm" disabled={loading || !file} className="bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5">
+              <Upload className="h-3.5 w-3.5" />
+              {loading ? "Importing…" : "Upload & Import"}
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

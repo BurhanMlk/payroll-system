@@ -38,6 +38,13 @@ export interface EmployeeContext {
   fullName: string;
 }
 
+export interface StudentContext {
+  id: string;
+  tenantId: string;
+  rollNumber: string;
+  fullName: string;
+}
+
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
@@ -45,6 +52,7 @@ declare global {
       user?: AuthUser;
       tenant?: TenantContext;
       employee?: EmployeeContext;
+      student?: StudentContext;
       requestId?: string;
     }
   }
