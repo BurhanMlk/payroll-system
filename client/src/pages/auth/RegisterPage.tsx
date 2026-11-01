@@ -159,7 +159,7 @@ export default function RegisterPage() {
         <div className="mb-8 text-center">
           <Logo className="mx-auto mb-3 h-14 w-14" />
           <h1 className="text-2xl font-semibold tracking-tight">Create your institution account</h1>
-          <p className="mt-1 text-sm text-muted-foreground">14-day free trial. No credit card required.</p>
+          <p className="mt-1 text-sm text-muted-foreground">7-day free trial. No credit card required.</p>
         </div>
 
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">

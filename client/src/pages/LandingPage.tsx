@@ -191,7 +191,7 @@ export default function LandingPage() {
               {content?.heroSubtitle ?? "Manage salaries, attendance, leave, loans and payslips for your entire staff all in one professional, easy-to-use platform."}
             </p>
             <div className="mt-8 flex flex-wrap gap-6 text-sm text-slate-300">
-              <span className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> 14-day free trial</span>
+              <span className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> 7-day free trial</span>
               <span className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> No credit card required</span>
               <span className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> Cancel anytime</span>
             </div>
@@ -388,7 +388,7 @@ export default function LandingPage() {
           <Globe2 className="mx-auto h-12 w-12 text-white/80" />
           <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">Ready to simplify your institution's payroll?</h2>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-indigo-100">
-            Join schools and colleges already saving hours every month. Start your 14-day free trial today.
+            Join schools and colleges already saving hours every month. Start your 7-day free trial today.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <Button asChild size="lg" className="bg-white text-indigo-700 hover:bg-indigo-50">
