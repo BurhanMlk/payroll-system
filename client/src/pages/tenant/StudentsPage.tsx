@@ -12,11 +12,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { formatCurrency } from "@/lib/utils";
+import { formatCnic, formatPhoneNumber } from "@/lib/validation";
 import type { Student, PaginationMeta } from "@/lib/types";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   Search,
-  Plus,
   X,
   Pencil,
   Trash2,
@@ -137,7 +137,7 @@ export default function StudentsPage() {
               <Upload className="h-4 w-4" /> Bulk Import
             </Button>
             <Button size="sm" onClick={() => setAddOpen(true)}>
-              <Plus className="h-4 w-4" /> Add Student
+              Add Student
             </Button>
           </div>
         }
@@ -348,12 +348,12 @@ function AddStudentDialog({
     if (editing) {
       setFullName(editing.fullName);
       setFatherName(editing.fatherName);
-      setNationalId(editing.nationalId);
+      setNationalId(formatCnic(editing.nationalId));
       setClassName(editing.className);
       setSection(editing.section || "A");
       setRollNumber(editing.rollNumber);
       setMonthlyFee(String(editing.monthlyFee));
-      setPhone(editing.phone || "");
+      setPhone(formatPhoneNumber(editing.phone || ""));
       setGender(editing.gender || "MALE");
       setAddress(editing.address || "");
     } else {
@@ -445,8 +445,9 @@ function AddStudentDialog({
               <Label className="text-xs">B-Form / CNIC Number *</Label>
               <Input
                 value={nationalId}
-                onChange={(e) => setNationalId(e.target.value)}
+                onChange={(e) => setNationalId(formatCnic(e.target.value))}
                 placeholder="e.g. 35201-1234567-1"
+                maxLength={15}
                 required
               />
             </div>
@@ -524,8 +525,9 @@ function AddStudentDialog({
               <Label className="text-xs">Contact Phone / Mobile</Label>
               <Input
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
                 placeholder="0300-1234567"
+                maxLength={12}
               />
             </div>
 

@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery } from "@tanstack/react-query";
 import { api, errorMessage } from "@/lib/api";
-import { isValidMobile } from "@/lib/validation";
+import { formatPhoneNumber, isValidMobile } from "@/lib/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -192,7 +192,16 @@ export default function RegisterPage() {
                 <Input placeholder="info@abc.edu" {...form.register("institutionEmail")} />
               </Field>
               <Field label="Phone" required error={form.formState.errors.phone?.message}>
-                <Input placeholder="03xx-xxxxxxx" {...form.register("phone")} />
+                <Input
+                  placeholder="03xx-xxxxxxx"
+                  maxLength={16}
+                  {...form.register("phone", {
+                    onChange: (e) => {
+                      const formatted = formatPhoneNumber(e.target.value, 15);
+                      form.setValue("phone", formatted);
+                    },
+                  })}
+                />
               </Field>
               <Field label="Country" error={form.formState.errors.country?.message}>
                 <select className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm" {...form.register("country")}>

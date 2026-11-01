@@ -36,8 +36,26 @@ interface AttendanceRecord {
   recorded: boolean;
 }
 
+interface MonthlyAttendanceRecord {
+  studentId: string;
+  rollNumber: string;
+  fullName: string;
+  fatherName: string;
+  className: string;
+  section: string | null;
+  present: number;
+  absent: number;
+  late: number;
+  halfDay: number;
+  leave: number;
+  totalMarked: number;
+  attendanceRate: number | null;
+}
+
 export default function StudentAttendancePage() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [viewMode, setViewMode] = useState<"daily" | "monthly">("daily");
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [selectedClass, setSelectedClass] = useState("Class 1");
   const [selectedSection, setSelectedSection] = useState("");
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
@@ -58,6 +76,21 @@ export default function StudentAttendancePage() {
       });
       return res.data.data as AttendanceRecord[];
     },
+  });
+
+  const { data: monthlyData, isLoading: monthlyLoading } = useQuery({
+    queryKey: ["student-attendance-monthly", month, selectedClass, selectedSection],
+    queryFn: async () => {
+      const res = await api.get("/students/attendance/monthly", {
+        params: {
+          month,
+          className: selectedClass || undefined,
+          section: selectedSection || undefined,
+        },
+      });
+      return res.data.data as MonthlyAttendanceRecord[];
+    },
+    enabled: viewMode === "monthly",
   });
 
   useEffect(() => {
@@ -114,21 +147,43 @@ export default function StudentAttendancePage() {
     <div>
       <PageHeader
         title="Student Attendance"
-        description="Mark and review daily class attendance manually or via Excel upload"
+        description="Mark daily class attendance manually or via Excel upload, and review monthly summaries"
         actions={
           <div className="flex items-center gap-2">
+            <div className="flex rounded-lg border bg-slate-100 p-0.5">
+              <button
+                type="button"
+                onClick={() => setViewMode("daily")}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                  viewMode === "daily" ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Daily
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("monthly")}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                  viewMode === "monthly" ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                Monthly
+              </button>
+            </div>
             <Button variant="outline" size="sm" onClick={() => setUploadOpen(true)}>
               <Upload className="h-4 w-4" /> Upload Excel Attendance
             </Button>
-            <Button
-              size="sm"
-              disabled={saveMutation.isPending || records.length === 0}
-              onClick={() => saveMutation.mutate()}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5"
-            >
-              <Save className="h-4 w-4" />
-              {saveMutation.isPending ? "Saving…" : "Save Attendance"}
-            </Button>
+            {viewMode === "daily" && (
+              <Button
+                size="sm"
+                disabled={saveMutation.isPending || records.length === 0}
+                onClick={() => saveMutation.mutate()}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5"
+              >
+                <Save className="h-4 w-4" />
+                {saveMutation.isPending ? "Saving…" : "Save Attendance"}
+              </Button>
+            )}
           </div>
         }
       />
@@ -136,15 +191,27 @@ export default function StudentAttendancePage() {
       {/* Control Bar */}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card p-4">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Attendance Date</Label>
-            <Input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-40 text-sm"
-            />
-          </div>
+          {viewMode === "daily" ? (
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Attendance Date</Label>
+              <Input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-40 text-sm"
+              />
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Month</Label>
+              <Input
+                type="month"
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
+                className="w-40 text-sm"
+              />
+            </div>
+          )}
 
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Class</Label>
@@ -181,7 +248,7 @@ export default function StudentAttendancePage() {
         </div>
 
         {/* Quick action buttons */}
-        {records.length > 0 && (
+        {viewMode === "daily" && records.length > 0 && (
           <div className="flex items-center gap-2 pt-2 sm:pt-0">
             <Button
               type="button"
@@ -205,8 +272,10 @@ export default function StudentAttendancePage() {
         )}
       </div>
 
-      {/* Summary KPI Cards */}
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
+      {viewMode === "daily" && (
+        <>
+          {/* Summary KPI Cards */}
+          <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
         <div className="rounded-xl border bg-card p-3 shadow-sm">
           <p className="text-[11px] font-medium text-muted-foreground">Total Students</p>
           <p className="mt-1 text-2xl font-bold text-slate-800">{total}</p>
@@ -330,6 +399,59 @@ export default function StudentAttendancePage() {
           </Table>
         )}
       </Card>
+        </>
+      )}
+
+      {viewMode === "monthly" && (
+        <Card className="overflow-hidden">
+          {monthlyLoading ? (
+            <div className="space-y-2 p-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-12" />
+              ))}
+            </div>
+          ) : !monthlyData || monthlyData.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <CalendarDays className="mb-3 h-10 w-10 text-muted-foreground/50" />
+              <p className="font-medium text-slate-800">No attendance recorded for this month</p>
+              <p className="text-sm text-muted-foreground">Upload Excel attendance or select a different month/class.</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-24">Roll No</TableHead>
+                  <TableHead>Student Name</TableHead>
+                  <TableHead>Father Name</TableHead>
+                  <TableHead>Class</TableHead>
+                  <TableHead className="text-center">Present</TableHead>
+                  <TableHead className="text-center">Absent</TableHead>
+                  <TableHead className="text-center">Late</TableHead>
+                  <TableHead className="text-center">Leave</TableHead>
+                  <TableHead className="text-center">Total</TableHead>
+                  <TableHead className="text-center">%</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {monthlyData.map((r) => (
+                  <TableRow key={r.studentId}>
+                    <TableCell className="font-mono text-xs font-semibold text-slate-700">{r.rollNumber}</TableCell>
+                    <TableCell className="font-semibold text-slate-900">{r.fullName}</TableCell>
+                    <TableCell className="text-slate-600">{r.fatherName}</TableCell>
+                    <TableCell>{r.className}{r.section && ` (${r.section})`}</TableCell>
+                    <TableCell className="text-center text-emerald-700 font-medium">{r.present}</TableCell>
+                    <TableCell className="text-center text-red-700 font-medium">{r.absent}</TableCell>
+                    <TableCell className="text-center text-blue-700 font-medium">{r.late}</TableCell>
+                    <TableCell className="text-center text-amber-700 font-medium">{r.leave}</TableCell>
+                    <TableCell className="text-center">{r.totalMarked}</TableCell>
+                    <TableCell className="text-center">{r.attendanceRate === null ? "—" : `${r.attendanceRate}%`}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </Card>
+      )}
 
       {/* Upload Modal */}
       <UploadAttendanceModal
@@ -358,6 +480,7 @@ function UploadAttendanceModal({
   onSuccess: () => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ imported: number; failed: { row: number; reason: string }[] } | null>(null);
   const { toast } = useToast();
@@ -388,6 +511,7 @@ function UploadAttendanceModal({
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("month", month);
       const res = await api.post("/students/attendance/import", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
@@ -425,13 +549,14 @@ function UploadAttendanceModal({
         </div>
 
         <p className="mb-4 text-xs text-slate-500">
-          Upload bulk attendance records. Use Roll Number, Date, Status (PRESENT, ABSENT, LATE, LEAVE).
+          Upload a full month in one sheet: one row per student with columns 1–31.
+          Fill each day cell with P, A, L, or Late.
         </p>
 
         <div className="mb-4 flex justify-between items-center rounded-xl border border-dashed border-indigo-200 bg-indigo-50/50 p-3">
           <div>
             <p className="text-xs font-semibold text-indigo-900">Download Excel Template</p>
-            <p className="text-[11px] text-indigo-700">Includes Roll Number, Date, and Status columns</p>
+            <p className="text-[11px] text-indigo-700">Roll Number, Student Name, Class, Section, and day columns 1–31</p>
           </div>
           <Button type="button" variant="outline" size="sm" onClick={handleDownloadTemplate} className="gap-1.5 text-xs">
             <Download className="h-3.5 w-3.5" /> Download Template
@@ -439,6 +564,17 @@ function UploadAttendanceModal({
         </div>
 
         <form onSubmit={handleUpload} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Attendance Month</Label>
+            <Input
+              type="month"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              className="text-xs"
+              required
+            />
+          </div>
+
           <div className="space-y-1.5">
             <Label className="text-xs font-medium">Select Excel / CSV File</Label>
             <Input

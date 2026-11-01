@@ -72,6 +72,53 @@ export async function syncRolePermissions(roleId: string, permissionKeys: string
   ]);
 }
 
+/**
+ * Idempotently ensures every system role exists and has the current canonical
+ * permission set. Existing roles are not renamed (admins may rename system
+ * roles), but their permission sets are restored to the defaults so newly
+ * added permissions become available without re-running the seed.
+ */
+export async function syncSystemRoles(): Promise<void> {
+  await seedPermissions();
+
+  for (const roleDef of DEFAULT_ROLES.filter((r) => r.scope === "PLATFORM")) {
+    let role = await prisma.role.findFirst({ where: { tenantId: null, key: roleDef.key } });
+    if (!role) {
+      role = await prisma.role.create({
+        data: {
+          tenantId: null,
+          scope: "PLATFORM",
+          key: roleDef.key,
+          name: roleDef.name,
+          description: roleDef.description,
+          isSystem: true,
+        },
+      });
+    }
+    await syncRolePermissions(role.id, roleDef.permissions);
+  }
+
+  const tenants = await prisma.tenant.findMany({ select: { id: true } });
+  for (const tenant of tenants) {
+    for (const roleDef of DEFAULT_ROLES.filter((r) => r.scope === "TENANT")) {
+      let role = await prisma.role.findFirst({ where: { tenantId: tenant.id, key: roleDef.key } });
+      if (!role) {
+        role = await prisma.role.create({
+          data: {
+            tenantId: tenant.id,
+            scope: "TENANT",
+            key: roleDef.key,
+            name: roleDef.name,
+            description: roleDef.description,
+            isSystem: true,
+          },
+        });
+      }
+      await syncRolePermissions(role.id, roleDef.permissions);
+    }
+  }
+}
+
 export async function getRoleByKey(tenantId: string, key: string) {
   return prisma.role.findUnique({ where: { tenantId_key: { tenantId, key } } });
 }

@@ -5,6 +5,7 @@ import { logger } from "./config/logger";
 import { prisma } from "./lib/prisma";
 import { redis } from "./lib/redis";
 import { startWorkers, startSchedulers, handleSubscriptionExpiry } from "./jobs";
+import { syncSystemRoles } from "./modules/rbac/rbac.service";
 
 const app = createApp();
 const server = http.createServer(app);
@@ -37,6 +38,15 @@ async function main(): Promise<void> {
   } catch (err) {
     logger.error({ err }, "Failed to connect to database");
     process.exit(1);
+  }
+
+  // Keep the permission catalog and system roles in sync with the code so
+  // newly added permissions are available to existing roles on every deploy.
+  try {
+    await syncSystemRoles();
+    logger.info("System roles and permissions synced.");
+  } catch (err) {
+    logger.warn({ err }, "System role sync failed; continuing startup.");
   }
 
   server.listen(env.PORT, () => {

@@ -19,9 +19,14 @@ export function isValidMobile(value: string): boolean {
   return digits.length >= 10 && digits.length <= 15;
 }
 
-/** Keeps only digits and caps the input at the phone-number length (11 digits). */
+/**
+ * Keeps only digits, caps the input at `maxDigits`, and formats it as a
+ * Pakistani mobile number: 0300-1234567 (dash after the first 4 digits).
+ */
 export function formatPhoneNumber(value: string, maxDigits = 11): string {
-  return cnicDigits(value).slice(0, maxDigits);
+  const digits = cnicDigits(value).slice(0, maxDigits);
+  const parts = [digits.slice(0, 4), digits.slice(4)];
+  return parts.filter(Boolean).join("-");
 }
 
 /** Employee phone must be exactly `maxDigits` digits (11 for a Pakistani mobile). */

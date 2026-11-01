@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatCurrency } from "@/lib/utils";
-import { Plus, Search, CheckCircle2, XCircle, Trash2 } from "lucide-react";
+import { Search, CheckCircle2, XCircle, Trash2 } from "lucide-react";
 
 interface Loan {
   id: string;
@@ -137,7 +137,7 @@ export default function LoansPage() {
           </div>
           <div className="flex items-end">
             <Button size="sm" onClick={() => createLoan.mutate()} disabled={!foundEmployee || !form.amount}>
-              <Plus className="h-4 w-4" /> Create Loan
+              Create Loan
             </Button>
           </div>
         </div>

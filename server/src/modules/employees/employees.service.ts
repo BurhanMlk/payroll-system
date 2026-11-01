@@ -490,10 +490,9 @@ export async function importEmployeesFile(
       lastName = parts.slice(1).join(" ") || parts[0];
     }
 
-    if (!firstName) {
-      failed.push({ row: rowNumber, reason: "First name is required." });
-      continue;
-    }
+    // Missing names are auto-filled with placeholder values so the row is
+    // still imported; it can be corrected later from the edit screen.
+    if (!firstName) firstName = `Employee ${rowNumber}`;
     if (!lastName) lastName = firstName;
 
     const rawSalary = salaryCol >= 0 ? r[salaryCol]?.replace(/[^0-9.]/g, "") : "0";

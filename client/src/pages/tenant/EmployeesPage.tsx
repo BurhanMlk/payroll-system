@@ -15,7 +15,7 @@ import { formatCurrency } from "@/lib/utils";
 import type { Employee, PaginationMeta } from "@/lib/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatCnic, formatPhoneNumber, isValidCnic, isValidPhoneNumber } from "@/lib/validation";
-import { Search, Plus, Users, X, Pencil, Trash2, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Search, Users, X, Pencil, Trash2, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface EmployeeResponse {
   items: Employee[];
@@ -98,7 +98,7 @@ export default function EmployeesPage() {
               <Upload className="h-4 w-4" /> Bulk Import
             </Button>
             <Button size="sm" onClick={() => setAddOpen(true)}>
-              <Plus className="h-4 w-4" /> Add Employee
+              Add Employee
             </Button>
           </div>
         }
@@ -276,13 +276,13 @@ function AddEmployeeDialog({ open, editing, onClose, onCreated }: { open: boolea
         lastName: editing.lastName,
         fatherName: editing.fatherName ?? "",
         employeeNumber: editing.employeeNumber,
-        nationalId: editing.nationalId ?? "",
+        nationalId: formatCnic(editing.nationalId ?? ""),
         dateOfBirth: toDateInput(editing.dateOfBirth),
         gender: editing.gender ?? "",
         email: editing.email ?? "",
-        phone: editing.phone ?? "",
+        phone: formatPhoneNumber(editing.phone ?? ""),
         address: editing.address ?? "",
-        emergencyContact: editing.emergencyContact ?? "",
+        emergencyContact: formatPhoneNumber(editing.emergencyContact ?? ""),
         departmentName: editing.department?.name ?? "",
         designationName: editing.designation?.name ?? "",
         branchId: editing.branch?.id ?? "",

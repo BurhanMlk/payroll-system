@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
-import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { Pencil, Trash2, X } from "lucide-react";
 
 interface LeaveType {
   id: string;
@@ -60,7 +60,7 @@ export default function LeaveTypesPage() {
         description="Define the types of leave employees can request"
         actions={
           <Button size="sm" onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="h-4 w-4" /> Add Leave Type
+            Add Leave Type
           </Button>
         }
       />

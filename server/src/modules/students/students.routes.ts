@@ -8,6 +8,7 @@ import {
   downloadTemplate,
   bulkImport,
   getAttendance,
+  getMonthlyAttendance,
   markAttendance,
   downloadAttendanceTemplate,
   importAttendance,
@@ -38,6 +39,7 @@ router.post("/bulk-import", requireWritableSubscription, requirePermission("stud
 
 // Student Attendance
 router.get("/attendance", requireActiveSubscription, requirePermission("student.attendance", "student.read"), getAttendance);
+router.get("/attendance/monthly", requireActiveSubscription, requirePermission("student.attendance", "student.read"), getMonthlyAttendance);
 router.post("/attendance", requireWritableSubscription, requirePermission("student.attendance"), validateBody(studentAttendanceRecordSchema), markAttendance);
 router.get("/attendance/template", requireActiveSubscription, requirePermission("student.attendance"), downloadAttendanceTemplate);
 router.post("/attendance/import", requireWritableSubscription, requirePermission("student.attendance"), upload.single("file"), importAttendance);

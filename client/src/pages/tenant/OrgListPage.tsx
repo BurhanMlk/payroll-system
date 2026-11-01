@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
-import { isValidCnic, isValidMobile } from "@/lib/validation";
-import { Plus, Trash2, Pencil, Check, X } from "lucide-react";
+import { formatCnic, formatPhoneNumber, isValidCnic, isValidMobile } from "@/lib/validation";
+import { Trash2, Pencil, Check, X } from "lucide-react";
 import { Pagination } from "./EmployeesPage";
 
 interface OrgKindConfig {
@@ -113,14 +113,14 @@ export default function OrgListPage({ kind }: { kind: "departments" | "designati
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <Input placeholder="Branch name *" value={branchForm.name} onChange={(e) => setBranchForm({ ...branchForm, name: e.target.value })} />
             <Input placeholder="Head of Branch" value={branchForm.headName} onChange={(e) => setBranchForm({ ...branchForm, headName: e.target.value })} />
-            <Input placeholder="CNIC" value={branchForm.headCnic} onChange={(e) => setBranchForm({ ...branchForm, headCnic: e.target.value })} />
-            <Input placeholder="Branch mobile" value={branchForm.phone} onChange={(e) => setBranchForm({ ...branchForm, phone: e.target.value })} />
+            <Input placeholder="CNIC" value={branchForm.headCnic} maxLength={15} onChange={(e) => setBranchForm({ ...branchForm, headCnic: formatCnic(e.target.value) })} />
+            <Input placeholder="Branch mobile" value={branchForm.phone} maxLength={16} onChange={(e) => setBranchForm({ ...branchForm, phone: formatPhoneNumber(e.target.value, 15) })} />
             <Input placeholder="Location" value={branchForm.address} onChange={(e) => setBranchForm({ ...branchForm, address: e.target.value })} />
           </div>
           <div className="mt-3 flex gap-2">
             <Input placeholder="Search branches…" className="max-w-sm" value={search} onChange={(e) => setSearch(e.target.value)} />
             <Button size="sm" onClick={addBranch} disabled={!branchForm.name.trim()}>
-              <Plus className="h-4 w-4" /> Add Branch
+              Add Branch
             </Button>
           </div>
         </Card>
@@ -130,7 +130,7 @@ export default function OrgListPage({ kind }: { kind: "departments" | "designati
           <div className="flex gap-2">
             <Input placeholder={`New ${config.singular.toLowerCase()} name`} value={newName} onChange={(e) => setNewName(e.target.value)} />
             <Button size="sm" onClick={() => newName.trim() && createMutation.mutate({ name: newName.trim() })} disabled={!newName.trim()}>
-              <Plus className="h-4 w-4" /> Add
+              Add
             </Button>
           </div>
         </div>

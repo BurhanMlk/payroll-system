@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { EmployeeSearchInput } from "@/components/EmployeeSearchInput";
-import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { Pencil, Trash2, X } from "lucide-react";
 
 interface Shift {
   id: string;
@@ -63,7 +63,7 @@ export default function ShiftsPage() {
         description="Define working shifts for attendance"
         actions={
           <Button size="sm" onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="h-4 w-4" /> Add Shift
+            Add Shift
           </Button>
         }
       />

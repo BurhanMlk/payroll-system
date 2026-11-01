@@ -28,6 +28,30 @@ async function generateRollNumber(tenantId: string, className?: string): Promise
   return roll;
 }
 
+/** Normalizes an uploaded/manual attendance value to the stored enum. */
+function normalizeStudentAttendanceStatus(raw: string | null | undefined): AttendanceStatus {
+  const v = (raw ?? "PRESENT").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  if (v === "ABSENT" || v === "A") return "ABSENT";
+  if (v === "LATE" || v === "T") return "LATE";
+  if (v === "HALF_DAY" || v === "HD") return "HALF_DAY";
+  if (v === "LEAVE" || v === "L" || v === "PAID_LEAVE" || v === "PL") return "PAID_LEAVE";
+  if (v === "UNPAID_LEAVE" || v === "UL") return "UNPAID_LEAVE";
+  return "PRESENT";
+}
+
+/** Converts the stored enum to the UI-facing status the client expects. */
+function toUiStudentStatus(status: AttendanceStatus): "PRESENT" | "ABSENT" | "LATE" | "HALF_DAY" | "LEAVE" {
+  if (status === "PAID_LEAVE" || status === "UNPAID_LEAVE") return "LEAVE";
+  if (status === "LATE") return "LATE";
+  if (status === "HALF_DAY") return "HALF_DAY";
+  if (status === "ABSENT") return "ABSENT";
+  return "PRESENT";
+}
+
+function daysInMonth(year: number, monthIndex: number): number {
+  return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+}
+
 export async function listStudents(tenantId: string, query: StudentListQuery) {
   const { page, limit, skip } = parsePagination({ page: query.page, limit: query.limit });
 
@@ -288,19 +312,12 @@ export async function importStudentsFile(
     if (!r || r.length === 0 || r.every((c) => !c)) continue;
     const rowNumber = i + 1;
 
-    const fullName = nameCol >= 0 ? r[nameCol]?.trim() : "";
-    const fatherName = fatherCol >= 0 ? r[fatherCol]?.trim() : "";
-    const nationalId = bformCol >= 0 ? r[bformCol]?.trim() : "";
-    const className = classCol >= 0 ? r[classCol]?.trim() : "";
-
-    if (!fullName || !fatherName || !nationalId || !className) {
-      failed.push({
-        row: rowNumber,
-        name: fullName || "Row " + rowNumber,
-        reason: "Name, Father Name, B-Form/CNIC, and Class are required fields.",
-      });
-      continue;
-    }
+    // Missing required fields are auto-filled with placeholder values so the
+    // row is still imported; it can be corrected later from the edit screen.
+    const fullName = (nameCol >= 0 ? r[nameCol]?.trim() : "") || `Student ${rowNumber}`;
+    const fatherName = (fatherCol >= 0 ? r[fatherCol]?.trim() : "") || "-";
+    const nationalId = (bformCol >= 0 ? r[bformCol]?.trim() : "") || `IMPORT-${rowNumber}`;
+    const className = (classCol >= 0 ? r[classCol]?.trim() : "") || "Unassigned";
 
     let rollNumber = rollCol >= 0 && r[rollCol]?.trim() ? r[rollCol]?.trim() : await generateRollNumber(tenantId, className);
 
@@ -403,9 +420,71 @@ export async function getStudentAttendance(
       fatherName: s.fatherName,
       className: s.className,
       section: s.section,
-      status: att?.status ?? "PRESENT",
+      status: att ? toUiStudentStatus(att.status) : "PRESENT",
       remarks: att?.remarks ?? "",
       recorded: !!att,
+    };
+  });
+}
+
+export async function getStudentMonthlyAttendance(
+  tenantId: string,
+  params: { month: string; className?: string; section?: string },
+) {
+  const monthMatch = String(params.month).match(/^(\d{4})-(\d{2})$/);
+  if (!monthMatch) throw AppError.badRequest("Month is required (e.g. 2026-10).");
+  const year = Number(monthMatch[1]);
+  const monthIndex = Number(monthMatch[2]) - 1;
+  const start = new Date(Date.UTC(year, monthIndex, 1));
+  const end = new Date(Date.UTC(year, monthIndex + 1, 0));
+
+  const studentWhere: Prisma.StudentWhereInput = { tenantId, status: "ACTIVE" };
+  if (params.className) studentWhere.className = params.className;
+  if (params.section) studentWhere.section = params.section;
+
+  const students = await prisma.student.findMany({
+    where: studentWhere,
+    orderBy: [{ className: "asc" }, { rollNumber: "asc" }],
+  });
+
+  const attendances = await prisma.studentAttendance.findMany({
+    where: {
+      tenantId,
+      studentId: { in: students.map((s) => s.id) },
+      date: { gte: start, lte: end },
+    },
+  });
+
+  const countsByStudent = new Map<string, Record<string, number>>();
+  for (const a of attendances) {
+    const entry = countsByStudent.get(a.studentId) ?? {};
+    const key = toUiStudentStatus(a.status);
+    entry[key] = (entry[key] ?? 0) + 1;
+    countsByStudent.set(a.studentId, entry);
+  }
+
+  return students.map((s) => {
+    const c = countsByStudent.get(s.id) ?? {};
+    const present = c.PRESENT ?? 0;
+    const absent = c.ABSENT ?? 0;
+    const late = c.LATE ?? 0;
+    const halfDay = c.HALF_DAY ?? 0;
+    const leave = c.LEAVE ?? 0;
+    const totalMarked = present + absent + late + halfDay + leave;
+    return {
+      studentId: s.id,
+      rollNumber: s.rollNumber,
+      fullName: s.fullName,
+      fatherName: s.fatherName,
+      className: s.className,
+      section: s.section,
+      present,
+      absent,
+      late,
+      halfDay,
+      leave,
+      totalMarked,
+      attendanceRate: totalMarked > 0 ? Math.round(((present + halfDay) / totalMarked) * 100) : null,
     };
   });
 }
@@ -422,12 +501,7 @@ export async function markStudentAttendance(
 
   let updatedCount = 0;
   for (const rec of records) {
-    let st: AttendanceStatus = "PRESENT";
-    if (rec.status === "ABSENT") st = "ABSENT";
-    else if (rec.status === "LATE") st = "LATE";
-    else if (rec.status === "HALF_DAY") st = "HALF_DAY";
-    else if ((rec.status as string) === "LEAVE" || (rec.status as string) === "PAID_LEAVE") st = "PAID_LEAVE";
-    else if ((rec.status as string) === "UNPAID_LEAVE") st = "UNPAID_LEAVE";
+    const st = normalizeStudentAttendanceStatus(rec.status as string);
 
     await prisma.studentAttendance.upsert({
       where: {
@@ -468,24 +542,34 @@ export async function generateStudentAttendanceTemplate(): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Attendance Template");
   sheet.columns = [
-    { header: "Roll Number", key: "rollNumber", width: 16 },
-    { header: "Date (YYYY-MM-DD)", key: "date", width: 20 },
-    { header: "Status (PRESENT/ABSENT/LATE/LEAVE)", key: "status", width: 30 },
-    { header: "Remarks", key: "remarks", width: 25 },
+    { header: "Roll Number", key: "rollNumber", width: 14 },
+    { header: "Student Name", key: "fullName", width: 20 },
+    { header: "Class", key: "className", width: 14 },
+    { header: "Section", key: "section", width: 10 },
   ];
+  for (let d = 1; d <= 31; d++) {
+    sheet.columns.push({ header: String(d), key: `d${d}`, width: 6 });
+  }
   sheet.getRow(1).font = { bold: true };
-  sheet.addRow({
+
+  const first: Record<string, string> = {
     rollNumber: "STU-0001",
-    date: new Date().toISOString().slice(0, 10),
-    status: "PRESENT",
-    remarks: "On time",
-  });
-  sheet.addRow({
+    fullName: "Muhammad Hamza",
+    className: "Class 9",
+    section: "A",
+  };
+  const second: Record<string, string> = {
     rollNumber: "STU-0002",
-    date: new Date().toISOString().slice(0, 10),
-    status: "ABSENT",
-    remarks: "Unexcused",
-  });
+    fullName: "Ayesha Bibi",
+    className: "Class 10",
+    section: "B",
+  };
+  for (let d = 1; d <= 31; d++) {
+    first[`d${d}`] = d % 6 === 0 ? "A" : "P";
+    second[`d${d}`] = d % 6 === 0 ? "L" : "P";
+  }
+  sheet.addRow(first);
+  sheet.addRow(second);
   return (await workbook.xlsx.writeBuffer()) as unknown as Buffer;
 }
 
@@ -493,6 +577,7 @@ export async function importStudentAttendanceFile(
   tenantId: string,
   file: Express.Multer.File,
   req: Request,
+  month?: string,
 ) {
   let rows: string[][] = [];
   const fileName = file.originalname.toLowerCase();
@@ -518,10 +603,17 @@ export async function importStudentAttendanceFile(
 
   const headers = rows[0].map(normalizeHeaderKey);
   const col = (candidates: string[]) => headers.findIndex((h) => candidates.includes(h));
-  const rollCol = col(["rollnumber", "rollno", "roll", "bform", "cnic"]);
-  const dateCol = col(["date", "attendance", "attendancedate"]);
-  const statusCol = col(["status", "attendancestatus"]);
-  const remarksCol = col(["remarks", "notes"]);
+
+  // Detect the wide "monthly" layout: one row per student with day-number
+  // columns (1..31 or D1..D31).
+  const dayCols = headers
+    .map((h, idx) => {
+      const m = h.match(/^d?([0-9]{1,2})$/);
+      if (!m) return null;
+      const day = Number(m[1]);
+      return day >= 1 && day <= 31 ? { day, colIndex: idx } : null;
+    })
+    .filter((x): x is { day: number; colIndex: number } => x !== null);
 
   let imported = 0;
   const failed: { row: number; reason: string }[] = [];
@@ -530,6 +622,71 @@ export async function importStudentAttendanceFile(
     where: { tenantId },
     select: { id: true, rollNumber: true, nationalId: true },
   });
+
+  if (dayCols.length > 0) {
+    const rollCol = col(["rollnumber", "rollno", "roll", "studentid"]);
+    const nameCol = col(["studentname", "fullname", "name"]);
+
+    const now = new Date();
+    const rawMonth = month ? String(month).trim() : `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+    const monthMatch = rawMonth.match(/^(\d{4})-(\d{2})$/);
+    const year = monthMatch ? Number(monthMatch[1]) : now.getUTCFullYear();
+    const monthIndex = monthMatch ? Number(monthMatch[2]) - 1 : now.getUTCMonth();
+    const maxDay = daysInMonth(year, monthIndex);
+
+    const studentMap = new Map<string, string>();
+    for (const s of students) {
+      studentMap.set(s.rollNumber.toLowerCase(), s.id);
+      studentMap.set(s.rollNumber.toLowerCase().replace(/[^a-z0-9]/g, ""), s.id);
+      if (s.nationalId) studentMap.set(s.nationalId.toLowerCase().replace(/[^a-z0-9]/g, ""), s.id);
+    }
+
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r || r.length === 0 || r.every((c) => !c)) continue;
+      const rowNum = i + 1;
+
+      const roll = rollCol >= 0 ? (r[rollCol] ?? "").trim() : "";
+      const cleanRoll = roll.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const studentId = studentMap.get(roll.toLowerCase()) || studentMap.get(cleanRoll);
+
+      if (!studentId) {
+        const label = roll || (nameCol >= 0 ? (r[nameCol] ?? "").trim() : "") || `Row ${rowNum}`;
+        failed.push({ row: rowNum, reason: `Student "${label}" not found.` });
+        continue;
+      }
+
+      for (const dc of dayCols) {
+        const rawStatus = (r[dc.colIndex] ?? "").trim();
+        if (!rawStatus) continue;
+        if (dc.day > maxDay) {
+          failed.push({ row: rowNum, reason: `Day ${dc.day} is not valid for ${rawMonth}.` });
+          continue;
+        }
+        const date = new Date(Date.UTC(year, monthIndex, dc.day));
+        const status = normalizeStudentAttendanceStatus(rawStatus);
+        try {
+          await prisma.studentAttendance.upsert({
+            where: { tenantId_studentId_date: { tenantId, studentId, date } },
+            update: { status, remarks: null },
+            create: { tenantId, studentId, date, status, remarks: null },
+          });
+          imported++;
+        } catch {
+          failed.push({ row: rowNum, reason: "Database update error." });
+        }
+      }
+    }
+
+    return { imported, failed };
+  }
+
+  // Long format fallback: one row per date with Roll | Date | Status | Remarks.
+  const rollCol = col(["rollnumber", "rollno", "roll", "bform", "cnic"]);
+  const dateCol = col(["date", "attendance", "attendancedate"]);
+  const statusCol = col(["status", "attendancestatus"]);
+  const remarksCol = col(["remarks", "notes"]);
+
   const studentMap = new Map<string, string>();
   for (const s of students) {
     studentMap.set(s.rollNumber.toLowerCase(), s.id);
@@ -559,12 +716,7 @@ export async function importStudentAttendanceFile(
     d.setUTCHours(0, 0, 0, 0);
 
     const rawStatus = (statusCol >= 0 ? r[statusCol]?.trim() : "PRESENT").toUpperCase();
-    let status: AttendanceStatus = "PRESENT";
-    if (rawStatus === "ABSENT") status = "ABSENT";
-    else if (rawStatus === "LATE") status = "LATE";
-    else if (rawStatus === "HALF_DAY") status = "HALF_DAY";
-    else if (rawStatus === "LEAVE" || rawStatus === "PAID_LEAVE") status = "PAID_LEAVE";
-    else if (rawStatus === "UNPAID_LEAVE") status = "UNPAID_LEAVE";
+    const status = normalizeStudentAttendanceStatus(rawStatus);
     const remarks = remarksCol >= 0 ? r[remarksCol]?.trim() : null;
 
     try {

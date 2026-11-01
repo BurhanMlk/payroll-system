@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { Plus, CheckCircle2, X } from "lucide-react";
+import { CheckCircle2, X } from "lucide-react";
 
 interface Advance {
   id: string;
@@ -74,7 +74,7 @@ export default function AdvancesPage() {
         actions={
           hasPermission("advance.create") && (
             <Button size="sm" onClick={() => setOpen(true)}>
-              <Plus className="h-4 w-4" /> Add Advance
+              Add Advance
             </Button>
           )
         }

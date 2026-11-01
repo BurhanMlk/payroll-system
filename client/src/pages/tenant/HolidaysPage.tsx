@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
 import { EmployeeSearchInput } from "@/components/EmployeeSearchInput";
 import { formatDate } from "@/lib/utils";
-import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { Pencil, Trash2, X } from "lucide-react";
 
 interface Holiday {
   id: string;
@@ -58,7 +58,7 @@ export default function HolidaysPage() {
         description="Manage institution holidays"
         actions={
           <Button size="sm" onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="h-4 w-4" /> Add Holiday
+            Add Holiday
           </Button>
         }
       />

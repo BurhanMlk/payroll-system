@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/toast";
-import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
+import { Pencil, Trash2, Check, X } from "lucide-react";
 
 interface SalaryTemplate {
   id: string;
@@ -77,7 +77,7 @@ export default function SalaryPage() {
       <div className="mb-4 flex gap-2">
         <Input placeholder="New template name (e.g. Teacher Grade A)" className="max-w-sm" value={name} onChange={(e) => setName(e.target.value)} />
         <Button size="sm" onClick={() => create.mutate()} disabled={!name.trim()}>
-          <Plus className="h-4 w-4" /> Create
+          Create
         </Button>
       </div>
 

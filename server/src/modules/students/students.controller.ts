@@ -8,6 +8,7 @@ import {
   generateStudentTemplate,
   importStudentsFile,
   getStudentAttendance,
+  getStudentMonthlyAttendance,
   markStudentAttendance,
   generateStudentAttendanceTemplate,
   importStudentAttendanceFile,
@@ -111,6 +112,21 @@ export async function markAttendance(req: Request, res: Response, next: NextFunc
   }
 }
 
+export async function getMonthlyAttendance(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { month, className, section } = req.query;
+    if (!month) throw AppError.badRequest("Month query parameter is required.");
+    const result = await getStudentMonthlyAttendance(req.tenant!.id, {
+      month: String(month),
+      className: className ? String(className) : undefined,
+      section: section ? String(section) : undefined,
+    });
+    ok(res, result);
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function downloadAttendanceTemplate(_req: Request, res: Response, next: NextFunction) {
   try {
     const buffer = await generateStudentAttendanceTemplate();
@@ -125,7 +141,7 @@ export async function downloadAttendanceTemplate(_req: Request, res: Response, n
 export async function importAttendance(req: Request, res: Response, next: NextFunction) {
   try {
     if (!req.file) throw AppError.badRequest("Please upload an Excel (.xlsx) or CSV file.");
-    const result = await importStudentAttendanceFile(req.tenant!.id, req.file, req);
+    const result = await importStudentAttendanceFile(req.tenant!.id, req.file, req, req.body?.month);
     ok(res, result);
   } catch (err) {
     next(err);
