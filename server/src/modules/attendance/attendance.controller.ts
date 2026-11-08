@@ -38,7 +38,7 @@ export async function bulkMark(req: Request, res: Response, next: NextFunction) 
 export async function update(req: Request, res: Response, next: NextFunction) {
   try {
     const result = await updateAttendance(req.tenant!.id, req.params.id, req.body, req);
-    await safeRefreshPayslips(req.tenant!.id, (result as { date?: Date })?.date ?? req.body?.date, req);
+    await safeRefreshPayslips(req.tenant!.id, (result as unknown as { date?: Date })?.date ?? req.body?.date, req);
     ok(res, result);
   } catch (err) {
     next(err);
@@ -47,8 +47,8 @@ export async function update(req: Request, res: Response, next: NextFunction) {
 
 export async function remove(req: Request, res: Response, next: NextFunction) {
   try {
-    const result = await deleteAttendance(req.tenant!.id, req.params.id, req);
-    await safeRefreshPayslips(req.tenant!.id, (result as { date?: Date })?.date, req);
+    await deleteAttendance(req.tenant!.id, req.params.id, req);
+    await safeRefreshPayslips(req.tenant!.id, req.query?.date ?? req.body?.date, req);
     noContent(res);
   } catch (err) {
     next(err);
