@@ -63,12 +63,20 @@ export default function MarkAttendancePage() {
     onError: (err) => toast({ title: "Failed", description: errorMessage(err), variant: "destructive" }),
   });
 
+  const getPeriodForDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const start = new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
+    const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).toISOString();
+    return { periodStart: start, periodEnd: end };
+  };
+
   const autoPayslips = useMutation({
-    mutationFn: () => api.post("/payroll/auto-payslips", {}),
+    mutationFn: (period?: { periodStart: string; periodEnd: string }) =>
+      api.post("/payroll/auto-payslips", period ?? {}),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["payslips"] });
       qc.invalidateQueries({ queryKey: ["salaries-overview"] });
-      toast({ title: "Payslips generated", variant: "success" });
+      toast({ title: "Payslips updated with attendance deduction", variant: "success" });
     },
     onError: (err) => toast({ title: "Payslip generation failed", description: errorMessage(err), variant: "destructive" }),
   });
@@ -86,7 +94,7 @@ export default function MarkAttendancePage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["attendance"] });
       toast({ title: "Attendance marked", variant: "success" });
-      autoPayslips.mutate();
+      autoPayslips.mutate(getPeriodForDate(date));
     },
     onError: (err) => toast({ title: "Failed", description: errorMessage(err), variant: "destructive" }),
   });
@@ -102,7 +110,7 @@ export default function MarkAttendancePage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["attendance"] });
       toast({ title: "Attendance marked for all employees", variant: "success" });
-      autoPayslips.mutate();
+      autoPayslips.mutate(getPeriodForDate(date));
     },
     onError: (err) => toast({ title: "Failed", description: errorMessage(err), variant: "destructive" }),
   });

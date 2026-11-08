@@ -118,6 +118,16 @@ export default function PayrollPage() {
                   <TableCell className="text-muted-foreground">{formatDate(run.createdAt)}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
+                      {run.status !== "PAID" && run.status !== "LOCKED" && hasPermission("payroll.mark_paid") && (
+                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1" onClick={() => action.mutate({ id: run.id, type: "mark-paid" })}>
+                          <DollarSign className="h-3.5 w-3.5" /> Mark Paid & Email
+                        </Button>
+                      )}
+                      {run.status === "PAID" && hasPermission("payroll.mark_paid") && (
+                        <Button size="sm" variant="outline" className="gap-1 text-xs" onClick={() => action.mutate({ id: run.id, type: "email-payslips" })}>
+                          <Send className="h-3 w-3" /> Resend Emails
+                        </Button>
+                      )}
                       {(run.status === "DRAFT" || run.status === "CALCULATED") && hasPermission("payroll.review") && (
                         <IconAction title="Send for review" onClick={() => action.mutate({ id: run.id, type: "review" })}>
                           <Send className="h-3.5 w-3.5" />
@@ -128,17 +138,12 @@ export default function PayrollPage() {
                           <CheckCircle2 className="h-3.5 w-3.5" />
                         </IconAction>
                       )}
-                      {(run.status === "APPROVED" || run.status === "PROCESSING") && hasPermission("payroll.mark_paid") && (
-                        <Button size="sm" onClick={() => action.mutate({ id: run.id, type: "mark-paid" })}>
-                          <DollarSign className="h-3.5 w-3.5" /> Mark Paid
-                        </Button>
-                      )}
                       {hasPermission("payroll.generate") && (
                         <IconAction title="Edit" onClick={() => setEditing(run)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </IconAction>
                       )}
-                      {hasPermission("payroll.generate") && (
+                      {hasPermission("payroll.generate") && run.status !== "PAID" && (
                         <IconAction title="Delete" onClick={() => confirmDelete(run)}>
                           <Trash2 className="h-3.5 w-3.5 text-red-500" />
                         </IconAction>

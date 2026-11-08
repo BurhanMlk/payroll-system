@@ -18,14 +18,14 @@ import { requirePermission } from "../../middlewares/requireRole";
 import { requireActiveSubscription, requireWritableSubscription } from "../../middlewares/requireActiveSubscription";
 import { validateBody } from "../../middlewares/validate";
 import { employeeCreateSchema, employeeUpdateSchema } from "./employees.validator";
-import { upload } from "../../services/uploads";
+import { upload, attendanceUpload } from "../../services/uploads";
 
 const router = Router();
 
 router.get("/", requireActiveSubscription, requirePermission("employee.read", "employee.create", "employee.update"), list);
 router.post("/", requireWritableSubscription, requirePermission("employee.create"), validateBody(employeeCreateSchema), create);
 router.get("/template", requireActiveSubscription, requirePermission("employee.create", "employee.read"), downloadTemplate);
-router.post("/bulk-import", requireWritableSubscription, requirePermission("employee.create"), upload.single("file"), bulkImport);
+router.post("/bulk-import", requireWritableSubscription, requirePermission("employee.create"), attendanceUpload.single("file"), bulkImport);
 router.get("/by-cnic/:cnic", requireActiveSubscription, requirePermission("employee.read", "employee.create", "employee.update"), getByCnic);
 router.get("/:id", requireActiveSubscription, requirePermission("employee.read", "employee.create", "employee.update"), get);
 router.put("/:id", requireWritableSubscription, requirePermission("employee.update"), validateBody(employeeUpdateSchema), update);

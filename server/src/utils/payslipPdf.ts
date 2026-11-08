@@ -106,18 +106,30 @@ export function buildPayslipPdf(data: PayslipPdfData): Promise<Buffer> {
     doc.moveDown(0.6);
     doc.fontSize(11).font("Helvetica-Bold").text("Earnings", { underline: true });
     doc.moveDown(0.3);
-    data.payrollItem.earnings.forEach((e) => {
-      doc.fontSize(9).font("Helvetica").text(e.name, 50, doc.y, { continued: true });
-      doc.font("Helvetica-Bold").text(e.amount.toFixed(2), { align: "right" });
-    });
+    const earnings = data.payrollItem?.earnings ?? [];
+    if (earnings.length === 0) {
+      doc.fontSize(9).font("Helvetica").text("Basic Salary", 50, doc.y, { continued: true });
+      doc.font("Helvetica-Bold").text(item.basicSalary.toFixed(2), { align: "right" });
+    } else {
+      earnings.forEach((e) => {
+        doc.fontSize(9).font("Helvetica").text(e.name, 50, doc.y, { continued: true });
+        doc.font("Helvetica-Bold").text(e.amount.toFixed(2), { align: "right" });
+      });
+    }
 
     doc.moveDown(0.6);
     doc.fontSize(11).font("Helvetica-Bold").text("Deductions", { underline: true });
     doc.moveDown(0.3);
-    data.payrollItem.deductions.forEach((d) => {
-      doc.fontSize(9).font("Helvetica").text(d.name, 50, doc.y, { continued: true });
-      doc.font("Helvetica-Bold").text(`-${d.amount.toFixed(2)}`, { align: "right" });
-    });
+    const deductions = data.payrollItem?.deductions ?? [];
+    if (deductions.length === 0 && item.totalDeductions.toNumber() > 0) {
+      doc.fontSize(9).font("Helvetica").text("Total Deductions", 50, doc.y, { continued: true });
+      doc.font("Helvetica-Bold").text(`-${item.totalDeductions.toFixed(2)}`, { align: "right" });
+    } else {
+      deductions.forEach((d) => {
+        doc.fontSize(9).font("Helvetica").text(d.name, 50, doc.y, { continued: true });
+        doc.font("Helvetica-Bold").text(`-${d.amount.toFixed(2)}`, { align: "right" });
+      });
+    }
 
     // Summary
     doc.moveDown(0.8);

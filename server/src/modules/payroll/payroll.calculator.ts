@@ -182,17 +182,18 @@ export function calculatePayroll(input: PayrollCalculationInput): PayrollCalcula
     trace.push(`Overtime: ${attendance.overtimeHours}h × ${input.overtimeRatePerHour} = ${otAmount}`);
   }
 
-  // Absence deduction.
-  if (attendance.absentDays > 0) {
+  // Absence & unpaid leave deduction.
+  const totalDeductibleDays = attendance.absentDays + (attendance.unpaidLeaveDays ?? 0);
+  if (totalDeductibleDays > 0) {
     const perDay = input.absentDeductionPerDay ?? dailyRate;
-    const amount = round2(attendance.absentDays * perDay);
+    const amount = round2(totalDeductibleDays * perDay);
     deductions.push({
       name: "Absence Deduction",
       type: "DEDUCTION",
       amount,
-      trace: `${attendance.absentDays} absent day(s) × ${perDay}/day = ${amount}.`,
+      trace: `${totalDeductibleDays} absent/unpaid leave day(s) × ${perDay}/day = ${amount}.`,
     });
-    trace.push(`Absence deduction: ${attendance.absentDays} × ${perDay} = ${amount}`);
+    trace.push(`Absence deduction: ${totalDeductibleDays} × ${perDay} = ${amount}`);
   }
 
   // Late arrival deduction.

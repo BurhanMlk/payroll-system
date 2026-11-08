@@ -3,9 +3,23 @@ import { markAttendance, bulkMarkAttendance, listAttendance, attendanceSummary, 
 import { autoGeneratePayslips } from "../payroll/payroll.service";
 import { ok, created, noContent } from "../../lib/response";
 
+async function safeRefreshPayslips(tenantId: string, rawDate: unknown, req: Request) {
+  try {
+    const d = rawDate ? new Date(rawDate as string | number | Date) : new Date();
+    if (isNaN(d.getTime())) return;
+    const start = new Date(d.getFullYear(), d.getMonth(), 1);
+    const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
+    await autoGeneratePayslips(tenantId, start, end, req);
+  } catch (_e) {
+    // Non-blocking: attendance marking still succeeds even if payroll run generation encounters an edge case
+  }
+}
+
 export async function mark(req: Request, res: Response, next: NextFunction) {
   try {
-    created(res, await markAttendance(req.tenant!.id, req.body, req));
+    const result = await markAttendance(req.tenant!.id, req.body, req);
+    await safeRefreshPayslips(req.tenant!.id, req.body?.date, req);
+    created(res, result);
   } catch (err) {
     next(err);
   }
@@ -13,7 +27,9 @@ export async function mark(req: Request, res: Response, next: NextFunction) {
 
 export async function bulkMark(req: Request, res: Response, next: NextFunction) {
   try {
-    created(res, await bulkMarkAttendance(req.tenant!.id, req.body, req));
+    const result = await bulkMarkAttendance(req.tenant!.id, req.body, req);
+    await safeRefreshPayslips(req.tenant!.id, req.body?.date, req);
+    created(res, result);
   } catch (err) {
     next(err);
   }
@@ -21,7 +37,9 @@ export async function bulkMark(req: Request, res: Response, next: NextFunction) 
 
 export async function update(req: Request, res: Response, next: NextFunction) {
   try {
-    ok(res, await updateAttendance(req.tenant!.id, req.params.id, req.body, req));
+    const result = await updateAttendance(req.tenant!.id, req.params.id, req.body, req);
+    await safeRefreshPayslips(req.tenant!.id, (result as { date?: Date })?.date ?? req.body?.date, req);
+    ok(res, result);
   } catch (err) {
     next(err);
   }
@@ -29,7 +47,8 @@ export async function update(req: Request, res: Response, next: NextFunction) {
 
 export async function remove(req: Request, res: Response, next: NextFunction) {
   try {
-    await deleteAttendance(req.tenant!.id, req.params.id, req);
+    const result = await deleteAttendance(req.tenant!.id, req.params.id, req);
+    await safeRefreshPayslips(req.tenant!.id, (result as { date?: Date })?.date, req);
     noContent(res);
   } catch (err) {
     next(err);

@@ -14,8 +14,8 @@ export async function markAttendance(tenantId: string, input: MarkAttendanceInpu
   const date = startOfDay(input.date);
   let status = input.status;
 
-  // Auto-recognize holidays and weekends.
-  if (input.source === "MANUAL" || input.source === "CSV") {
+  // Auto-recognize holidays and weekends only when status is default PRESENT
+  if ((input.source === "MANUAL" || input.source === "CSV") && status === "PRESENT") {
     const holiday = await prisma.holiday.findFirst({
       where: { tenantId, date: { gte: startOfDay(date), lte: endOfDay(date) } },
     });

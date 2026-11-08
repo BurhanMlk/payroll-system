@@ -12,8 +12,16 @@ export const upload = multer({
       "image/webp",
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel",
+      "text/csv",
+      "application/csv",
+      "text/plain",
+      "application/octet-stream",
     ];
-    if (allowed.includes(file.mimetype)) cb(null, true);
+    const name = file.originalname.toLowerCase();
+    const isSpreadsheet = name.endsWith(".xlsx") || name.endsWith(".xls") || name.endsWith(".csv");
+    if (allowed.includes(file.mimetype) || isSpreadsheet) cb(null, true);
     else cb(AppError.badRequest(`File type "${file.mimetype}" is not allowed.`, "INVALID_FILE_TYPE"));
   },
 });

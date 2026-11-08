@@ -48,6 +48,12 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/webp",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+  "text/csv",
+  "application/csv",
+  "text/plain",
+  "application/octet-stream",
 ]);
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB

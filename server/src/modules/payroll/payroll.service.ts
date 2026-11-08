@@ -54,6 +54,7 @@ export async function generatePayroll(tenantId: string, opts: GenerateOptions, r
   });
 
   const workingDays = cycle.workingDaysPerMonth || 22;
+  const configuredDeductionPerDay = await getDeductionSetting(tenantId);
   const exceptions: PayrollException[] = [];
   const computed: Array<{
     employee: (typeof employees)[number];
@@ -117,6 +118,7 @@ export async function generatePayroll(tenantId: string, opts: GenerateOptions, r
       hourlyRate,
       loanInstallment,
       advanceDeduction,
+      absentDeductionPerDay: configuredDeductionPerDay > 0 ? configuredDeductionPerDay : undefined,
       taxConfig: {
         enabled: taxConfig.enabled ?? false,
         mode: (taxConfig.mode as "FIXED" | "PERCENTAGE" | "SLAB" | "NONE") ?? "NONE",
@@ -396,8 +398,8 @@ export async function approvePayroll(tenantId: string, id: string, remarks: stri
 
 export async function markPayrollPaid(tenantId: string, id: string, req: Request) {
   const run = await getPayrollRun(tenantId, id);
-  if (run.status !== "APPROVED" && run.status !== "PROCESSING") {
-    throw AppError.badRequest("Payroll must be approved before marking as paid.");
+  if (run.status === "PAID" || run.status === "LOCKED") {
+    throw AppError.badRequest("Payroll is already marked as paid.");
   }
 
   await prisma.$transaction(async (tx) => {
@@ -576,7 +578,11 @@ async function summarizeAttendance(tenantId: string, employeeId: string, from: D
     workingDays: 22,
   };
   for (const r of records) {
-    if (["PRESENT", "LATE", "HALF_DAY", "WORK_FROM_HOME"].includes(r.status)) summary.presentDays++;
+    if (["PRESENT", "LATE", "WORK_FROM_HOME"].includes(r.status)) summary.presentDays++;
+    if (r.status === "HALF_DAY") {
+      summary.presentDays += 0.5;
+      summary.absentDays += 0.5;
+    }
     if (r.status === "ABSENT") summary.absentDays++;
     if (r.status === "PAID_LEAVE") summary.paidLeaveDays++;
     if (r.status === "UNPAID_LEAVE") summary.unpaidLeaveDays++;
@@ -599,9 +605,13 @@ export async function autoGeneratePayslips(tenantId: string, periodStart: Date, 
   const monthLabel = `${periodStart.getFullYear()}-${String(periodStart.getMonth() + 1).padStart(2, "0")}`;
   const name = `Auto ${monthLabel} Payslips`;
 
-  // Remove a previous auto run for the same period so it can regenerate cleanly.
+  // Remove a previous auto run for the same period so it can regenerate cleanly,
+  // unless it has already been marked as PAID or LOCKED.
   const existing = await prisma.payrollRun.findFirst({ where: { tenantId, periodStart, periodEnd, name } });
   if (existing) {
+    if (existing.status === "PAID" || existing.status === "LOCKED") {
+      return existing;
+    }
     await prisma.payrollRun.delete({ where: { id: existing.id } });
   }
 
@@ -681,6 +691,29 @@ export async function autoGeneratePayslips(tenantId: string, periodStart: Date, 
           snapshot: {},
         },
       });
+
+      await tx.payrollEarning.create({
+        data: {
+          tenantId,
+          payrollItemId: item.id,
+          name: "Basic Salary",
+          type: "EARNING",
+          amount: new Prisma.Decimal(r.basic),
+          taxable: false,
+        },
+      });
+
+      if (r.leaveDeduction > 0) {
+        await tx.payrollDeduction.create({
+          data: {
+            tenantId,
+            payrollItemId: item.id,
+            name: `Attendance Deduction (${r.leaveDays} day${r.leaveDays > 1 ? "s" : ""})`,
+            type: "DEDUCTION",
+            amount: new Prisma.Decimal(r.leaveDeduction),
+          },
+        });
+      }
 
       // Payslip is visible immediately, but stays UNPAID until admin marks paid.
       await tx.payslip.create({

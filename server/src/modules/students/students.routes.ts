@@ -27,7 +27,7 @@ import {
   studentFeePaySchema,
   studentFeeGenerateSchema,
 } from "./students.validator";
-import { upload } from "../../services/uploads";
+import { upload, attendanceUpload } from "../../services/uploads";
 
 const router = Router();
 
@@ -35,14 +35,14 @@ const router = Router();
 router.get("/", requireActiveSubscription, requirePermission("student.read", "student.create", "student.update"), list);
 router.post("/", requireWritableSubscription, requirePermission("student.create"), validateBody(studentCreateSchema), create);
 router.get("/template", requireActiveSubscription, requirePermission("student.create", "student.read"), downloadTemplate);
-router.post("/bulk-import", requireWritableSubscription, requirePermission("student.create"), upload.single("file"), bulkImport);
+router.post("/bulk-import", requireWritableSubscription, requirePermission("student.create"), attendanceUpload.single("file"), bulkImport);
 
 // Student Attendance
 router.get("/attendance", requireActiveSubscription, requirePermission("student.attendance", "student.read"), getAttendance);
 router.get("/attendance/monthly", requireActiveSubscription, requirePermission("student.attendance", "student.read"), getMonthlyAttendance);
 router.post("/attendance", requireWritableSubscription, requirePermission("student.attendance"), validateBody(studentAttendanceRecordSchema), markAttendance);
 router.get("/attendance/template", requireActiveSubscription, requirePermission("student.attendance"), downloadAttendanceTemplate);
-router.post("/attendance/import", requireWritableSubscription, requirePermission("student.attendance"), upload.single("file"), importAttendance);
+router.post("/attendance/import", requireWritableSubscription, requirePermission("student.attendance"), attendanceUpload.single("file"), importAttendance);
 
 // Student Fees
 router.get("/fees", requireActiveSubscription, requirePermission("student.fee", "student.read"), getFees);
