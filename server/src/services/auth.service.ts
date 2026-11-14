@@ -167,7 +167,7 @@ export async function login(email: string, password: string, ip?: string): Promi
           "SUBSCRIPTION_EXPIRED",
           "Your free trial has ended / subscription has expired (your balance is insufficient). Please subscribe first to continue using EduPayroll.",
           402,
-          { subscriptionExpired: true, tenantId: tenant.id },
+          { details: { subscriptionExpired: true, tenantId: tenant.id } },
         );
       }
     }
