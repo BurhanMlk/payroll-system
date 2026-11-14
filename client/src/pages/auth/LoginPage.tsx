@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toast";
 import Logo from "@/components/Logo";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, AlertTriangle } from "lucide-react";
 
 const schema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -25,6 +25,7 @@ export default function LoginPage() {
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [expiredModal, setExpiredModal] = useState<{ open: boolean; message: string }>({ open: false, message: "" });
   const { register, handleSubmit, formState } = useForm<FormValues>({ resolver: zodResolver(schema) });
 
   const onSubmit = async (values: FormValues) => {
@@ -33,8 +34,23 @@ export default function LoginPage() {
       const user = await login(values.email, values.password);
       toast({ title: "Welcome back", variant: "success" });
       navigate(user.scope === "PLATFORM" ? "/platform" : "/app");
-    } catch (err) {
-      toast({ title: "Sign in failed", description: errorMessage(err), variant: "destructive" });
+    } catch (err: unknown) {
+      const anyErr = err as { response?: { data?: { code?: string; message?: string; error?: { code?: string; message?: string } } } };
+      const code = anyErr?.response?.data?.code || anyErr?.response?.data?.error?.code;
+      const msg = errorMessage(err);
+      if (
+        code === "SUBSCRIPTION_EXPIRED" ||
+        msg.toLowerCase().includes("trial") ||
+        msg.toLowerCase().includes("balance is insufficient") ||
+        msg.toLowerCase().includes("subscription has expired")
+      ) {
+        setExpiredModal({
+          open: true,
+          message: msg || "Your balance is insufficient or your free trial has ended. Please subscribe first to continue.",
+        });
+      } else {
+        toast({ title: "Sign in failed", description: msg, variant: "destructive" });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -90,6 +106,35 @@ export default function LoginPage() {
           </Link>
         </p>
       </div>
+
+      {expiredModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+              <AlertTriangle className="h-7 w-7" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900">Subscription / Trial Expired</h3>
+            <div className="rounded-lg bg-amber-50 p-3.5 text-xs text-amber-900 border border-amber-200 text-left space-y-1">
+              <p className="font-semibold text-amber-950">Your balance is insufficient / Please subscribe first</p>
+              <p className="text-slate-700">{expiredModal.message}</p>
+            </div>
+            <p className="text-xs text-slate-500">
+              Aapka 7-day free trial ya subscription period khatam ho chuka hai. Sign in karne aur service use karne ke liye pehle plan subscribe ya renew karein.
+            </p>
+            <div className="flex flex-col gap-2 pt-2">
+              <Link
+                to="/register"
+                className="w-full inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition"
+              >
+                Subscribe / Upgrade Plan &rarr;
+              </Link>
+              <Button variant="ghost" size="sm" onClick={() => setExpiredModal({ open: false, message: "" })}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

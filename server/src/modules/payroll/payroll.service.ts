@@ -4,7 +4,7 @@ import { AppError } from "../../lib/errors";
 import { logger } from "../../config/logger";
 import { parsePagination, paginationMeta } from "../../lib/response";
 import { recordAudit } from "../../services/audit.service";
-import { emailPayslipsForRun } from "../../services/payslipMail.service";
+import { emailPayslipsForRun, emailSinglePayslip } from "../../services/payslipMail.service";
 import { calculatePayroll, PayrollCalculationResult, SalaryComponentInput } from "./payroll.calculator";
 import { endOfDay, startOfDay, startOfMonth, endOfMonth } from "../../utils/dates";
 import { toCsv } from "../../utils/csv";
@@ -558,6 +558,94 @@ export async function getPayslip(tenantId: string, id: string) {
   });
   if (!payslip) throw AppError.notFound("Payslip not found.");
   return payslip;
+}
+
+export async function markSinglePayslipPaid(tenantId: string, payslipId: string, req: Request) {
+  const payslip = await prisma.payslip.findFirst({
+    where: { id: payslipId, tenantId },
+    include: { employee: true },
+  });
+  if (!payslip) throw AppError.notFound("Payslip not found.");
+
+  const updated = await prisma.payslip.update({
+    where: { id: payslipId },
+    data: { paymentStatus: "PAID", paymentDate: new Date() },
+  });
+
+  const emailResult = await emailSinglePayslip(tenantId, payslipId);
+
+  await recordAudit({
+    req,
+    action: "payslip.marked_paid",
+    module: "payroll",
+    recordId: payslipId,
+    recordType: "Payslip",
+    metadata: { employeeId: payslip.employeeId, emailSent: emailResult.success },
+  });
+
+  return { payslip: updated, emailSent: emailResult.success, error: emailResult.error };
+}
+
+export async function sendSinglePayslipEmail(tenantId: string, payslipId: string, req: Request) {
+  const payslip = await prisma.payslip.findFirst({
+    where: { id: payslipId, tenantId },
+  });
+  if (!payslip) throw AppError.notFound("Payslip not found.");
+
+  const emailResult = await emailSinglePayslip(tenantId, payslipId);
+  if (!emailResult.success) {
+    throw AppError.badRequest(emailResult.error || "Failed to send email.");
+  }
+
+  await recordAudit({
+    req,
+    action: "payslip.emailed",
+    module: "payroll",
+    recordId: payslipId,
+    recordType: "Payslip",
+  });
+
+  return { success: true };
+}
+
+export async function markAllPayslipsPaid(tenantId: string, req: Request) {
+  const unpaid = await prisma.payslip.findMany({
+    where: { tenantId, paymentStatus: { not: "PAID" } },
+  });
+
+  if (unpaid.length === 0) {
+    return { paidCount: 0, message: "No unpaid payslips found." };
+  }
+
+  await prisma.payslip.updateMany({
+    where: { tenantId, id: { in: unpaid.map((p) => p.id) } },
+    data: { paymentStatus: "PAID", paymentDate: new Date() },
+  });
+
+  // Also mark active runs as PAID
+  const runIds = Array.from(new Set(unpaid.map((p) => p.payrollRunId)));
+  if (runIds.length > 0) {
+    await prisma.payrollRun.updateMany({
+      where: { tenantId, id: { in: runIds }, status: { notIn: ["PAID", "LOCKED"] } },
+      data: { status: "PAID" },
+    });
+  }
+
+  // Dispatch emails in background
+  for (const rId of runIds) {
+    void dispatchPayslipEmails(tenantId, rId);
+  }
+
+  await recordAudit({
+    req,
+    action: "payslips.bulk_marked_paid",
+    module: "payroll",
+    recordId: tenantId,
+    recordType: "Tenant",
+    metadata: { count: unpaid.length },
+  });
+
+  return { paidCount: unpaid.length };
 }
 
 // ---- Helpers ---------------------------------------------------------------

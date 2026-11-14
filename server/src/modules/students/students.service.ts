@@ -331,8 +331,11 @@ export async function importStudentsFile(
     const monthlyFee = parseFloat(rawFee || "0") || 0;
     const phone = phoneCol >= 0 ? r[phoneCol]?.trim() || null : null;
     const address = addressCol >= 0 ? r[addressCol]?.trim() || null : null;
-    const rawGender = genderCol >= 0 ? (r[genderCol] ?? "").toUpperCase() : null;
-    const gender = ["MALE", "FEMALE", "OTHER"].includes(rawGender ?? "") ? (rawGender as never) : null;
+    const rawGender = genderCol >= 0 ? (r[genderCol] ?? "").toUpperCase().trim() : null;
+    let gender: "MALE" | "FEMALE" | "OTHER" | null = null;
+    if (["M", "MALE", "BOY", "MAN"].includes(rawGender ?? "")) gender = "MALE";
+    else if (["F", "FEMALE", "GIRL", "WOMAN"].includes(rawGender ?? "")) gender = "FEMALE";
+    else if (["O", "OTHER"].includes(rawGender ?? "")) gender = "OTHER";
 
     let dateOfBirth: Date | null = null;
     if (dobCol >= 0 && r[dobCol]) {

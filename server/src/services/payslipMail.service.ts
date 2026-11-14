@@ -184,3 +184,71 @@ export async function emailPayslipsForRun(
   logger.info({ tenantId, payrollRunId, ...summary }, "Payslip emails processed");
   return summary;
 }
+
+/**
+ * Emails a single employee their payslip PDF along with portal login details.
+ */
+export async function emailSinglePayslip(
+  tenantId: string,
+  payslipId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const [tenant, payslip] = await Promise.all([
+    prisma.tenant.findUnique({ where: { id: tenantId } }),
+    prisma.payslip.findFirst({
+      where: { id: payslipId, tenantId },
+      include: {
+        employee: true,
+        payrollItem: { include: { earnings: true, deductions: true } },
+        payrollRun: true,
+      },
+    }),
+  ]);
+
+  if (!payslip) return { success: false, error: "Payslip not found." };
+  const employee = payslip.employee;
+  if (!employee.email) return { success: false, error: "Employee has no email address configured." };
+
+  const institutionName = tenant?.name ?? "Your institution";
+  const pdf = await buildPayslipPdf({
+    payslip,
+    employee,
+    payrollItem: payslip.payrollItem,
+    payrollRun: payslip.payrollRun,
+    institution: {
+      name: institutionName,
+      address: tenant?.address,
+      logoUrl: tenant?.logoUrl,
+    },
+  });
+
+  const portalUrl = (env.APP_ORIGIN || "https://edupayroll.tech").replace(/\/+$/, "") + "/employee";
+  const sent = await sendEmail(
+    employee.email,
+    `Payslip ${formatDate(payslip.periodStart)} – ${formatDate(payslip.periodEnd)} · ${institutionName}`,
+    buildEmailHtml({
+      employeeName: `${employee.firstName} ${employee.lastName}`,
+      institutionName,
+      periodStart: payslip.periodStart,
+      periodEnd: payslip.periodEnd,
+      gross: fmtMoney(payslip.grossSalary, tenant?.currency ?? "USD"),
+      deductions: fmtMoney(payslip.totalDeductions, tenant?.currency ?? "USD"),
+      net: fmtMoney(payslip.netSalary, tenant?.currency ?? "USD"),
+      currency: tenant?.currency ?? "USD",
+      portalUrl,
+      employeeCnic: employee.nationalId,
+    }),
+    `Hi ${employee.firstName}, your payslip for ${formatDate(payslip.periodStart)} – ${formatDate(payslip.periodEnd)} is attached. Net paid: ${fmtMoney(payslip.netSalary, tenant?.currency ?? "USD")}. You can also view it on the employee portal at ${portalUrl}`,
+    [
+      {
+        filename: `payslip-${employee.employeeNumber}-${formatDate(payslip.periodStart)}.pdf`,
+        content: pdf,
+        contentType: "application/pdf",
+      },
+    ],
+  );
+
+  if (!sent) return { success: false, error: "SMTP is not configured on server." };
+
+  await prisma.payslip.update({ where: { id: payslip.id }, data: { emailedAt: new Date() } });
+  return { success: true };
+}

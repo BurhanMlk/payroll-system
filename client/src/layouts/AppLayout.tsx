@@ -214,6 +214,29 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
+
+      {user?.tenant?.subscriptionExpired && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+              <AlertCircle className="h-8 w-8" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900">Subscription / Trial Expired</h3>
+            <div className="rounded-lg bg-amber-50 p-3.5 text-xs text-amber-900 border border-amber-200 text-left space-y-1">
+              <p className="font-semibold text-amber-950">Your balance is insufficient / Please subscribe first</p>
+              <p className="text-slate-700">
+                Aapka 7-day free trial ya monthly subscription khatam ho chuka hai. Application ko continue karne ke liye please apna plan subscribe ya renew karein.
+              </p>
+            </div>
+            <button
+              onClick={() => navigate("/app/billing")}
+              className="w-full inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition shadow"
+            >
+              Go to Billing &amp; Subscribe Now &rarr;
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -36,6 +36,25 @@ export async function resolveTenant(req: Request, _res: Response, next: NextFunc
     }
 
     const subscription = tenant.subscription;
+    let subStatus = subscription?.status;
+    const now = new Date();
+    if (subscription && subStatus) {
+      if (subStatus === "TRIALING" && subscription.trialEndDate && subscription.trialEndDate < now) {
+        subStatus = "EXPIRED";
+        void prisma.subscription.update({ where: { id: subscription.id }, data: { status: "EXPIRED" } }).catch(() => {});
+        void prisma.tenant.update({ where: { id: tenant.id }, data: { status: "SUSPENDED" } }).catch(() => {});
+      } else if (
+        subStatus === "ACTIVE" &&
+        subscription.currentPeriodEnd &&
+        subscription.currentPeriodEnd < now &&
+        (!subscription.gracePeriodEnd || subscription.gracePeriodEnd < now)
+      ) {
+        subStatus = "EXPIRED";
+        void prisma.subscription.update({ where: { id: subscription.id }, data: { status: "EXPIRED" } }).catch(() => {});
+        void prisma.tenant.update({ where: { id: tenant.id }, data: { status: "SUSPENDED" } }).catch(() => {});
+      }
+    }
+
     const features: Record<string, boolean> = {};
     for (const f of subscription?.plan.features ?? []) {
       features[f.key] = f.enabled;
@@ -53,7 +72,7 @@ export async function resolveTenant(req: Request, _res: Response, next: NextFunc
             id: subscription.id,
             planKey: subscription.plan.key,
             planName: subscription.plan.name,
-            status: subscription.status,
+            status: subStatus ?? subscription.status,
             renewalDate: subscription.renewalDate,
             gracePeriodEnd: subscription.gracePeriodEnd,
             features,

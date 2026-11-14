@@ -6,7 +6,16 @@ export interface User {
   scope: "PLATFORM" | "TENANT";
   roles: string[];
   permissions: string[];
-  tenant?: { id: string; name: string; slug: string; status: string; currency: string; institutionType?: string } | null;
+  tenant?: {
+    id: string;
+    name: string;
+    slug: string;
+    status: string;
+    currency: string;
+    institutionType?: string;
+    subscriptionExpired?: boolean;
+    subscriptionStatus?: string;
+  } | null;
 }
 
 export interface PaginationMeta {

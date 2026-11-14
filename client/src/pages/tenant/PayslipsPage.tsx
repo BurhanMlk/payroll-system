@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, errorMessage } from "@/lib/api";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { Download, FileText, Search } from "lucide-react";
+import { Download, FileText, Search, DollarSign, Send } from "lucide-react";
 
 interface Payslip {
   id: string;
@@ -33,8 +33,9 @@ interface EmployeeOption {
 }
 
 export default function PayslipsPage() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const { toast } = useToast();
+  const qc = useQueryClient();
   const currency = user?.tenant?.currency ?? "USD";
   const [search, setSearch] = useState("");
   const [employeeId, setEmployeeId] = useState("");
@@ -47,6 +48,48 @@ export default function PayslipsPage() {
       const res = await api.get("/payroll/payslips/list", { params: { limit: 200 } });
       return res.data.data as Payslip[];
     },
+  });
+
+  const markPaidSingle = useMutation({
+    mutationFn: (id: string) => api.post(`/payroll/payslips/${id}/mark-paid`),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["payslips"] });
+      qc.invalidateQueries({ queryKey: ["salaries-overview"] });
+      qc.invalidateQueries({ queryKey: ["payroll-runs"] });
+      const emailSent = res.data.data?.emailSent;
+      toast({
+        title: "Salary Paid",
+        description: emailSent
+          ? "Payment marked and payslip emailed to employee."
+          : "Payment marked. (Email skipped or SMTP not configured).",
+        variant: "success",
+      });
+    },
+    onError: (err) => toast({ title: "Failed", description: errorMessage(err), variant: "destructive" }),
+  });
+
+  const emailSingle = useMutation({
+    mutationFn: (id: string) => api.post(`/payroll/payslips/${id}/email`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["payslips"] });
+      toast({ title: "Payslip Emailed", description: "Payslip PDF and portal login credentials sent to employee.", variant: "success" });
+    },
+    onError: (err) => toast({ title: "Failed to email", description: errorMessage(err), variant: "destructive" }),
+  });
+
+  const markAllPaid = useMutation({
+    mutationFn: () => api.post(`/payroll/payslips/mark-all-paid`),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ["payslips"] });
+      qc.invalidateQueries({ queryKey: ["payroll-runs"] });
+      qc.invalidateQueries({ queryKey: ["salaries-overview"] });
+      toast({
+        title: "All Payslips Paid & Emailed",
+        description: `Marked ${res.data.data?.paidCount ?? 0} payslips as paid and dispatched emails to all employees.`,
+        variant: "success",
+      });
+    },
+    onError: (err) => toast({ title: "Bulk action failed", description: errorMessage(err), variant: "destructive" }),
   });
 
   const searchEmployee = useMutation({
@@ -112,7 +155,27 @@ export default function PayslipsPage() {
 
   return (
     <div>
-      <PageHeader title="Payslips" description="View and download employee payslips" />
+      <PageHeader
+        title="Payslips"
+        description="View, pay, and email employee payslips"
+        actions={
+          hasPermission("payroll.mark_paid") ? (
+            <Button
+              size="sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-sm"
+              onClick={() => {
+                if (window.confirm("Are you sure you want to mark ALL unpaid payslips as PAID and email every employee?")) {
+                  markAllPaid.mutate();
+                }
+              }}
+              disabled={markAllPaid.isPending}
+            >
+              <DollarSign className="h-4 w-4" />
+              {markAllPaid.isPending ? "Processing..." : "Mark All Paid & Email All"}
+            </Button>
+          ) : undefined
+        }
+      />
 
       <Card className="mb-4 p-4">
         <div className="flex flex-wrap items-end gap-3">
@@ -166,7 +229,7 @@ export default function PayslipsPage() {
                 <TableHead>Deductions</TableHead>
                 <TableHead>Net</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Download</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -183,9 +246,40 @@ export default function PayslipsPage() {
                   <TableCell className="font-medium">{formatCurrency(p.netSalary, currency)}</TableCell>
                   <TableCell><Badge variant={statusVariant(p.paymentStatus)}>{p.paymentStatus.toLowerCase()}</Badge></TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" onClick={() => downloadPdf(p.id, p.employee.employeeNumber)}>
-                      <Download className="h-4 w-4" /> PDF
-                    </Button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      {p.paymentStatus !== "PAID" && hasPermission("payroll.mark_paid") && (
+                        <Button
+                          size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white h-7 px-2.5 text-xs gap-1"
+                          onClick={() => markPaidSingle.mutate(p.id)}
+                          disabled={markPaidSingle.isPending}
+                          title="Mark this employee paid and send them payslip email with portal access"
+                        >
+                          <DollarSign className="h-3.5 w-3.5" /> Mark Paid & Email
+                        </Button>
+                      )}
+                      {p.paymentStatus === "PAID" && hasPermission("payroll.mark_paid") && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2.5 text-xs gap-1 text-slate-700 hover:bg-slate-100"
+                          onClick={() => emailSingle.mutate(p.id)}
+                          disabled={emailSingle.isPending}
+                          title="Email payslip PDF & portal login to this employee"
+                        >
+                          <Send className="h-3 w-3" /> Email
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => downloadPdf(p.id, p.employee.employeeNumber)}
+                        title="Download PDF"
+                      >
+                        <Download className="h-3.5 w-3.5" /> PDF
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

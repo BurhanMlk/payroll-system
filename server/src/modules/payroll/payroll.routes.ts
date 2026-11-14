@@ -20,6 +20,9 @@ import {
   salariesCsv,
   getDeduction,
   setDeduction,
+  paySingleSlip,
+  mailSingleSlip,
+  payAllSlips,
 } from "./payroll.controller";
 import { requirePermission } from "../../middlewares/requireRole";
 import { requireActiveSubscription, requireWritableSubscription } from "../../middlewares/requireActiveSubscription";
@@ -46,6 +49,9 @@ router.post("/:id/unlock", requireWritableSubscription, requirePermission("payro
 // Payslips
 router.post("/:id/payslips", requireWritableSubscription, requirePermission("payroll.mark_paid", "payroll.generate"), makePayslips);
 router.post("/:id/email-payslips", requireWritableSubscription, requirePermission("payroll.mark_paid", "payroll.generate"), mailPayslips);
+router.post("/payslips/mark-all-paid", requireWritableSubscription, requirePermission("payroll.mark_paid"), payAllSlips);
+router.post("/payslips/:id/mark-paid", requireWritableSubscription, requirePermission("payroll.mark_paid"), paySingleSlip);
+router.post("/payslips/:id/email", requireWritableSubscription, requirePermission("payroll.mark_paid", "payroll.generate"), mailSingleSlip);
 router.get("/payslips/list", requireActiveSubscription, requirePermission("payroll.read", "payroll.generate", "payroll.review", "payroll.approve", "payroll.mark_paid"), listSlips);
 router.get("/payslips/:id", requireActiveSubscription, requirePermission("payroll.read", "payroll.generate", "payroll.review", "payroll.approve", "payroll.mark_paid"), getSlip);
 router.get("/payslips/:id/pdf", requireActiveSubscription, requirePermission("payroll.read", "payroll.generate", "payroll.review", "payroll.approve", "payroll.mark_paid"), getSlipPdf);

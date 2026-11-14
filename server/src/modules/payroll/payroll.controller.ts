@@ -19,6 +19,9 @@ import {
   salaryCsv,
   getDeductionSetting,
   setDeductionSetting,
+  markSinglePayslipPaid,
+  sendSinglePayslipEmail,
+  markAllPayslipsPaid,
 } from "./payroll.service";
 import { ok, created, noContent } from "../../lib/response";
 import { prisma } from "../../lib/prisma";
@@ -159,6 +162,30 @@ export async function getSlipPdf(req: Request, res: Response, next: NextFunction
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="payslip-${data.employee.employeeNumber}.pdf"`);
     res.send(pdf);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function paySingleSlip(req: Request, res: Response, next: NextFunction) {
+  try {
+    ok(res, await markSinglePayslipPaid(req.tenant!.id, req.params.id, req));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function mailSingleSlip(req: Request, res: Response, next: NextFunction) {
+  try {
+    ok(res, await sendSinglePayslipEmail(req.tenant!.id, req.params.id, req));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function payAllSlips(req: Request, res: Response, next: NextFunction) {
+  try {
+    ok(res, await markAllPayslipsPaid(req.tenant!.id, req));
   } catch (err) {
     next(err);
   }

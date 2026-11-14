@@ -24,12 +24,21 @@ export interface SafeUser {
   scope: "PLATFORM" | "TENANT";
   roles: string[];
   permissions: string[];
-  tenant?: { id: string; name: string; slug: string; status: string; currency: string; institutionType?: string } | null;
+  tenant?: {
+    id: string;
+    name: string;
+    slug: string;
+    status: string;
+    currency: string;
+    institutionType?: string;
+    subscriptionExpired?: boolean;
+    subscriptionStatus?: string;
+  } | null;
 }
 
 const safeUserInclude = {
   roles: { include: { role: { include: { permissions: { include: { permission: true } } } } } },
-  tenant: true,
+  tenant: { include: { subscription: true } },
 } satisfies Prisma.UserInclude;
 
 type LoadedUser = Prisma.UserGetPayload<{ include: typeof safeUserInclude }>;
@@ -39,6 +48,15 @@ function buildSafeUserFromLoaded(withRoles: LoadedUser): SafeUser {
   const permissions = Array.from(
     new Set(withRoles.roles.flatMap((ur) => ur.role.permissions.map((rp) => rp.permission.key))),
   );
+  const sub = withRoles.tenant?.subscription;
+  const now = new Date();
+  let subscriptionExpired = false;
+  if (sub) {
+    if (sub.status === "TRIALING" && sub.trialEndDate && sub.trialEndDate < now) subscriptionExpired = true;
+    else if (["EXPIRED", "SUSPENDED", "CANCELLED"].includes(sub.status)) subscriptionExpired = true;
+    else if (sub.status === "ACTIVE" && sub.currentPeriodEnd && sub.currentPeriodEnd < now && (!sub.gracePeriodEnd || sub.gracePeriodEnd < now)) subscriptionExpired = true;
+  }
+
   return {
     id: withRoles.id,
     email: withRoles.email,
@@ -55,6 +73,8 @@ function buildSafeUserFromLoaded(withRoles: LoadedUser): SafeUser {
           status: withRoles.tenant.status,
           currency: withRoles.tenant.currency,
           institutionType: withRoles.tenant.institutionType,
+          subscriptionExpired,
+          subscriptionStatus: sub?.status,
         }
       : null,
   };
@@ -117,6 +137,41 @@ export async function login(email: string, password: string, ip?: string): Promi
     where: { id: user.id },
     data: { failedLoginAttempts: 0, lockedUntil: null, lastLoginAt: new Date() },
   });
+
+  if (user.tenantId) {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: user.tenantId },
+      include: { subscription: true },
+    });
+    if (tenant?.subscription) {
+      const now = new Date();
+      const sub = tenant.subscription;
+      let isExpired = false;
+      if (sub.status === "TRIALING" && sub.trialEndDate && sub.trialEndDate < now) {
+        isExpired = true;
+      } else if (sub.status === "EXPIRED" || sub.status === "SUSPENDED" || sub.status === "CANCELLED") {
+        isExpired = true;
+      } else if (
+        sub.status === "ACTIVE" &&
+        sub.currentPeriodEnd &&
+        sub.currentPeriodEnd < now &&
+        (!sub.gracePeriodEnd || sub.gracePeriodEnd < now)
+      ) {
+        isExpired = true;
+      }
+
+      if (isExpired) {
+        void prisma.subscription.update({ where: { id: sub.id }, data: { status: "EXPIRED" } }).catch(() => {});
+        void prisma.tenant.update({ where: { id: tenant.id }, data: { status: "SUSPENDED" } }).catch(() => {});
+        throw new AppError(
+          "SUBSCRIPTION_EXPIRED",
+          "Your free trial has ended / subscription has expired (your balance is insufficient). Please subscribe first to continue using EduPayroll.",
+          402,
+          { subscriptionExpired: true, tenantId: tenant.id },
+        );
+      }
+    }
+  }
 
   return issueTokens(user, ip);
 }

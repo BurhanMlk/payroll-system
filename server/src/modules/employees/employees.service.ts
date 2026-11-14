@@ -480,14 +480,18 @@ export async function importEmployeesFile(
     if (!r || r.length === 0 || r.every((c) => !c)) continue;
 
     const rowNumber = i + 1;
-    let firstName = firstNameCol >= 0 ? r[firstNameCol] ?? "" : "";
-    let lastName = lastNameCol >= 0 ? r[lastNameCol] ?? "" : "";
+    let firstName = firstNameCol >= 0 ? (r[firstNameCol] ?? "").trim() : "";
+    let lastName = lastNameCol >= 0 ? (r[lastNameCol] ?? "").trim() : "";
 
-    // If only one Name column was present and has spaces, split into first/last
-    if (firstName && !lastName && firstNameCol >= 0 && lastNameCol < 0) {
+    // If only one Name column was present or firstName has full name, split into first/last
+    if (firstName && (!lastName || lastName === firstName)) {
       const parts = firstName.split(/\s+/);
-      firstName = parts[0];
-      lastName = parts.slice(1).join(" ") || parts[0];
+      if (parts.length > 1) {
+        firstName = parts[0];
+        lastName = parts.slice(1).join(" ");
+      } else {
+        lastName = parts[0];
+      }
     }
 
     // Missing names are auto-filled with placeholder values so the row is
@@ -498,19 +502,29 @@ export async function importEmployeesFile(
     const rawSalary = salaryCol >= 0 ? r[salaryCol]?.replace(/[^0-9.]/g, "") : "0";
     const basicSalary = parseFloat(rawSalary || "0") || 0;
 
-    const fatherName = fatherNameCol >= 0 ? r[fatherNameCol] : null;
-    const nationalId = nationalIdCol >= 0 ? r[nationalIdCol] : null;
-    const email = emailCol >= 0 ? r[emailCol] : null;
-    const phone = phoneCol >= 0 ? r[phoneCol] : null;
-    const deptName = deptCol >= 0 ? r[deptCol] : undefined;
-    const desigName = desigCol >= 0 ? r[desigCol] : undefined;
-    const rawType = typeCol >= 0 ? (r[typeCol] ?? "").toUpperCase().replace(/[\s-]/g, "_") : "FULL_TIME";
-    const employmentType: EmploymentType = (["FULL_TIME", "PART_TIME", "CONTRACT", "VISITING", "INTERN", "PROBATION"].includes(rawType)
-      ? rawType
-      : "FULL_TIME") as EmploymentType;
-    const rawGender = genderCol >= 0 ? (r[genderCol] ?? "").toUpperCase() : null;
-    const gender = ["MALE", "FEMALE", "OTHER"].includes(rawGender ?? "") ? (rawGender as never) : null;
-    const address = addressCol >= 0 ? r[addressCol] : null;
+    const fatherName = fatherNameCol >= 0 && r[fatherNameCol] ? r[fatherNameCol].trim() : null;
+    const nationalId = nationalIdCol >= 0 && r[nationalIdCol] ? r[nationalIdCol].trim() : null;
+    const email = emailCol >= 0 && r[emailCol] ? r[emailCol].trim() : null;
+    const phone = phoneCol >= 0 && r[phoneCol] ? r[phoneCol].trim() : null;
+    const deptName = deptCol >= 0 && r[deptCol] ? r[deptCol].trim() : undefined;
+    const desigName = desigCol >= 0 && r[desigCol] ? r[desigCol].trim() : undefined;
+
+    // Prisma EmploymentType enum: PERMANENT, CONTRACT, PART_TIME, VISITING, TEMPORARY
+    const rawType = typeCol >= 0 ? (r[typeCol] ?? "").toUpperCase().replace(/[\s-]/g, "_") : "PERMANENT";
+    let employmentType: EmploymentType = "PERMANENT";
+    if (["CONTRACT", "CONTRACTUAL"].includes(rawType)) employmentType = "CONTRACT";
+    else if (["PART_TIME", "PARTTIME"].includes(rawType)) employmentType = "PART_TIME";
+    else if (["VISITING", "GUEST"].includes(rawType)) employmentType = "VISITING";
+    else if (["TEMPORARY", "TEMP", "INTERN", "PROBATION"].includes(rawType)) employmentType = "TEMPORARY";
+    else employmentType = "PERMANENT";
+
+    const rawGender = genderCol >= 0 ? (r[genderCol] ?? "").toUpperCase().trim() : null;
+    let gender: "MALE" | "FEMALE" | "OTHER" | null = null;
+    if (["M", "MALE", "BOY", "MAN"].includes(rawGender ?? "")) gender = "MALE";
+    else if (["F", "FEMALE", "GIRL", "WOMAN"].includes(rawGender ?? "")) gender = "FEMALE";
+    else if (["O", "OTHER"].includes(rawGender ?? "")) gender = "OTHER";
+
+    const address = addressCol >= 0 && r[addressCol] ? r[addressCol].trim() : null;
 
     let joiningDate: Date | null = null;
     if (joinCol >= 0 && r[joinCol]) {
