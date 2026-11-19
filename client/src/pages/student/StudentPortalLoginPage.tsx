@@ -1,5 +1,5 @@
 import { useState, FormEvent } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { studentApi, setStudentToken, StudentAccount } from "@/lib/studentApi";
 import { errorMessage } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -104,12 +104,6 @@ export default function StudentPortalLoginPage() {
         <p className="mt-4 text-center text-[11px] text-slate-500">
           Default password is the last 4 digits of your B-Form/CNIC or your Roll Number.
         </p>
-
-        <div className="mt-4 pt-3 border-t text-center space-y-1">
-          <p className="text-xs text-slate-500">
-            Institution Admin? <Link to="/login" className="text-indigo-600 font-medium hover:underline">Admin Login</Link>
-          </p>
-        </div>
       </div>
 
       {/* Account Selection Modal */}

@@ -63,7 +63,7 @@ export default function LoginPage() {
           <div className="flex flex-col items-center text-center">
             <Logo className="mb-4 h-24 w-24" />
             <h1 className="text-3xl font-semibold tracking-tight">EduPayroll</h1>
-            <p className="mt-2 text-base text-muted-foreground">Payroll for educational institutions</p>
+            <p className="mt-2 text-base text-muted-foreground">Payroll for institute</p>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">

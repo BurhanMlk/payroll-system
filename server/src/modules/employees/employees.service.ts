@@ -4,6 +4,7 @@ import { prisma } from "../../lib/prisma";
 import { AppError } from "../../lib/errors";
 import { parsePagination, paginationMeta } from "../../lib/response";
 import { recordAudit } from "../../services/audit.service";
+import { parseSpreadsheetBuffer } from "../../utils/spreadsheet";
 import { EmployeeCreateInput, EmployeeUpdateInput } from "./employees.validator";
 import { Request } from "express";
 
@@ -417,31 +418,7 @@ export async function importEmployeesFile(
   file: Express.Multer.File,
   req: Request,
 ): Promise<{ imported: number; failed: { row: number; name?: string; reason: string }[] }> {
-  let rows: string[][] = [];
-  const fileName = file.originalname.toLowerCase();
-
-  if (fileName.endsWith(".xlsx") || fileName.endsWith(".xls")) {
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(file.buffer as never);
-    const worksheet = workbook.worksheets[0];
-    if (!worksheet) throw AppError.badRequest("Uploaded workbook has no worksheets.");
-    worksheet.eachRow((row) => {
-      const values: string[] = [];
-      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-        values[colNumber - 1] = parseCellString(cell.value);
-      });
-      rows.push(values);
-    });
-  } else {
-    // Parse CSV
-    const text = file.buffer.toString("utf-8").replace(/^\uFEFF/, "");
-    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-    rows = lines.map((line) => {
-      // Basic comma/semicolon/tab delimiter splitting
-      const delimiter = line.includes(";") ? ";" : line.includes("\t") ? "\t" : ",";
-      return line.split(delimiter).map((c) => c.replace(/^["']|["']$/g, "").trim());
-    });
-  }
+  const rows = parseSpreadsheetBuffer(file.buffer);
 
   if (rows.length < 2) {
     throw AppError.badRequest("File must contain a header row and at least one data row.");
