@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { AppError } from "../lib/errors";
 import { prisma } from "../lib/prisma";
+import { redis } from "../lib/redis";
 
 /**
  * Resolves the tenant from the authenticated user's session — NEVER from
@@ -8,6 +9,7 @@ import { prisma } from "../lib/prisma";
  * multi-tenant isolation: a client cannot forge its tenant identity.
  *
  * Attaches `req.tenant` with subscription context for downstream middleware.
+ * Uses Redis caching to keep middleware overhead sub-millisecond.
  */
 export async function resolveTenant(req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
@@ -21,6 +23,16 @@ export async function resolveTenant(req: Request, _res: Response, next: NextFunc
       next();
       return;
     }
+
+    const cacheKey = `cache:tenant:ctx:${user.tenantId}`;
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        req.tenant = JSON.parse(cached);
+        next();
+        return;
+      }
+    } catch {}
 
     const tenant = await prisma.tenant.findUnique({
       where: { id: user.tenantId },
@@ -82,6 +94,8 @@ export async function resolveTenant(req: Request, _res: Response, next: NextFunc
           }
         : undefined,
     };
+
+    void redis.set(cacheKey, JSON.stringify(req.tenant), "EX", 30).catch(() => {});
 
     next();
   } catch (err) {

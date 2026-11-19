@@ -2,11 +2,12 @@ import { NextFunction, Request, Response } from "express";
 import { AppError } from "../lib/errors";
 import { verifyAccessToken } from "../lib/jwt";
 import { prisma } from "../lib/prisma";
+import { redis } from "../lib/redis";
 
 /**
  * Authenticates the request via `Authorization: Bearer <token>` or the
  * `access_token` httpOnly cookie. Loads the user's current roles and
- * permissions from the database so permission changes apply immediately.
+ * permissions with high-performance Redis caching to keep API responses instant.
  */
 export async function requireAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
@@ -28,6 +29,18 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
       payload = verifyAccessToken(token);
     } catch {
       throw AppError.unauthorized("Your session has expired. Please sign in again.", "TOKEN_EXPIRED");
+    }
+
+    const cacheKey = `cache:user:auth:${payload.sub}`;
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        req.user = JSON.parse(cached);
+        next();
+        return;
+      }
+    } catch {
+      // Redis error fallback to db
     }
 
     const user = await prisma.user.findUnique({
@@ -55,6 +68,8 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
       roles,
       permissions,
     };
+
+    void redis.set(cacheKey, JSON.stringify(req.user), "EX", 30).catch(() => {});
 
     next();
   } catch (err) {

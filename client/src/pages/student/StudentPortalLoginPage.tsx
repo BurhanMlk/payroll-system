@@ -107,9 +107,6 @@ export default function StudentPortalLoginPage() {
 
         <div className="mt-4 pt-3 border-t text-center space-y-1">
           <p className="text-xs text-slate-500">
-            Faculty or Staff? <Link to="/employee" className="text-indigo-600 font-medium hover:underline">Employee Login</Link>
-          </p>
-          <p className="text-xs text-slate-500">
             Institution Admin? <Link to="/login" className="text-indigo-600 font-medium hover:underline">Admin Login</Link>
           </p>
         </div>
